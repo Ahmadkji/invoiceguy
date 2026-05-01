@@ -14,6 +14,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { loadEnvConfig } from "@next/env";
+
+loadEnvConfig(process.cwd());
 
 const BASE_URL = process.env.INTEGRATION_BASE_URL ?? "http://localhost:3000";
 const TEST_EMAIL = process.env.E2E_TEST_EMAIL ?? "";
@@ -90,6 +93,9 @@ function releaseLock(): void {
 let sharedCookies: string[] = [];
 let currentUserId: string | null = null;
 
+/** Raw Set-Cookie headers from the most recent signIn() call. */
+let lastSignInSetCookies: string[] = [];
+
 function getCookieHeader(): string {
   return sharedCookies.join("; ");
 }
@@ -114,6 +120,8 @@ export type ApiResult<T = Record<string, unknown>> = {
   ok: boolean;
   status: number;
   body: T;
+  /** Raw Set-Cookie headers from the sign-in response (only populated by signIn). */
+  setCookieHeaders: string[];
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -136,8 +144,9 @@ export async function signIn(
   });
   const setCookie = res.headers.getSetCookie?.() ?? [];
   storeCookies(setCookie);
+  lastSignInSetCookies = setCookie;
   const body = (await res.json()) as Record<string, unknown>;
-  return { ok: body.ok === true, status: res.status, body };
+  return { ok: body.ok === true, status: res.status, body, setCookieHeaders: setCookie };
 }
 
 export async function signOut(): Promise<void> {
@@ -300,4 +309,8 @@ export function setCurrentUserId(id: string | null): void {
   currentUserId = id;
 }
 
-export { BASE_URL, TEST_EMAIL, TEST_PASSWORD };
+export function getLastSignInSetCookies(): string[] {
+  return lastSignInSetCookies;
+}
+
+export { BASE_URL, TEST_EMAIL, TEST_PASSWORD, getCookieHeader, storeCookies };
