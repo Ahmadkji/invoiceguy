@@ -116,6 +116,8 @@ function mapBillingRuleSnapshot(raw: unknown): TimeEntry["billingRuleSnapshot"] 
     record.incrementMinutes ?? record.increment_minutes ?? null;
   const minimumMinutesValue =
     record.minimumMinutes ?? record.minimum_minutes ?? null;
+  const entryKindValue = toNullableString(record.entryKind ?? record.entry_kind);
+  const entryKind = entryKindValue === "tiny_task" ? "tiny_task" : null;
 
   return {
     rule,
@@ -127,6 +129,7 @@ function mapBillingRuleSnapshot(raw: unknown): TimeEntry["billingRuleSnapshot"] 
       minimumMinutesValue === null || minimumMinutesValue === undefined
         ? null
         : toInteger(minimumMinutesValue, 0),
+    ...(entryKind ? { entryKind } : {}),
   };
 }
 

@@ -57,6 +57,7 @@ export interface TimeEntry {
     rule: BillingRule;
     incrementMinutes: number | null;
     minimumMinutes: number | null;
+    entryKind?: "tiny_task";
   };
   status: TimeEntryStatus;
   createdAt: string;

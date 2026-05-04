@@ -1159,6 +1159,7 @@ export default function NewInvoicePage() {
                   const wouldAmount = calculateAmount(minutes, entry.hourlyRate);
                   const isAdded = addedTimeEntryIds.has(entry.id);
                   const projectName = projectById.get(entry.projectId)?.name;
+                  const isTinyTask = entry.billingRuleSnapshot.entryKind === "tiny_task";
 
                   return (
                     <div
@@ -1166,8 +1167,13 @@ export default function NewInvoicePage() {
                       className="rounded-lg border border-slate-200 px-3 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">
-                          {projectName ? `${projectName}: ${entry.taskNote}` : entry.taskNote}
+                        <p className="text-sm font-medium text-slate-800 flex items-center gap-2 min-w-0">
+                          <span className="truncate">{projectName ? `${projectName}: ${entry.taskNote}` : entry.taskNote}</span>
+                          {isTinyTask && (
+                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                              Tiny Task
+                            </span>
+                          )}
                         </p>
                         <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
                           <span>{entry.entryDate}</span>

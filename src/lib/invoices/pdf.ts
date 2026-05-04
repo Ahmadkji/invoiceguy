@@ -251,7 +251,11 @@ function drawInvoiceItemsTable(
     const entry = timeEntries.find((candidate) => candidate.id === item.timeEntryId);
     const project = projects.find((candidate) => candidate.id === entry?.projectId);
     const projectDisplayName = item.projectNameSnapshot || project?.name || "Hourly work";
-    const descriptionText = `${item.description}\n${entry ? getRuleLabel(entry.billingRuleSnapshot.rule) : "Manual entry"} - ${projectDisplayName}`;
+    const isTinyTask = entry?.billingRuleSnapshot.entryKind === "tiny_task";
+    const entryMeta = entry
+      ? `${isTinyTask ? "Tiny task · " : ""}${getRuleLabel(entry.billingRuleSnapshot.rule)}`
+      : "Manual entry";
+    const descriptionText = `${item.description}\n${entryMeta} - ${projectDisplayName}`;
     const descriptionLines = wrapText(descriptionText, ctx.font, FONT_SIZES.body, 210);
     const rowLineHeight = FONT_SIZES.body + 3;
     const rowHeight = Math.max(24, descriptionLines.length * rowLineHeight + 10);
@@ -277,7 +281,12 @@ function drawInvoiceItemsTable(
       font: ctx.font,
       color: rgb(0.35, 0.39, 0.44),
     });
-    ctx.page.drawText(entry ? formatTimeRange(entry.startTime, entry.endTime) || "-" : "-", {
+    const sessionText = entry
+      ? isTinyTask
+        ? "Tiny task"
+        : (formatTimeRange(entry.startTime, entry.endTime).replace(" – ", " to ") || "-")
+      : "-";
+    ctx.page.drawText(sessionText, {
       x: columnXs[1],
       y: topY - 14,
       size: FONT_SIZES.small,
@@ -482,4 +491,3 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
 
   return pdf.save();
 }
-

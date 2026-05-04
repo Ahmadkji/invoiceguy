@@ -196,6 +196,8 @@ export async function POST(request: NextRequest) {
   const billingRulePayload = asRecord(body.billingRuleSnapshot);
   const ruleCandidate = toStringValue(billingRulePayload.rule, "exact");
   const safeRule = BILLING_RULES.includes(ruleCandidate as BillingRule) ? (ruleCandidate as BillingRule) : "exact";
+  const entryKindCandidate = toNullableString(billingRulePayload.entryKind ?? billingRulePayload.entry_kind);
+  const entryKind = entryKindCandidate === "tiny_task" ? "tiny_task" : null;
 
   // Recalculate financials server-side; do not trust client-supplied billedMinutes / amount.
   const minimumMinutes = toNumber(billingRulePayload.minimumMinutes, 0);
@@ -224,6 +226,7 @@ export async function POST(request: NextRequest) {
       rule: safeRule,
       incrementMinutes: billingRulePayload.incrementMinutes ?? null,
       minimumMinutes: billingRulePayload.minimumMinutes ?? null,
+      ...(entryKind ? { entryKind } : {}),
     },
     status: "uninvoiced",
   };
