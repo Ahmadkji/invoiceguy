@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { Timer, Plus, Zap, CheckCircle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Timer, Plus, Zap, CheckCircle, X, UserPlus, FolderPlus } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
 import {
   formatMinutes,
@@ -12,7 +12,7 @@ import {
   calculateAmount,
   getBillingRuleConfig,
 } from "@/lib/billing-rules";
-import { TimeEntry } from "@/lib/types";
+import { TimeEntry, type BillingRule } from "@/lib/types";
 
 type CreateTimeEntryResponse = {
   ok?: boolean;
@@ -34,10 +34,26 @@ export default function TimeTrackingPage() {
   const tickTimer = useAppStore((s) => s.tickTimer);
   const addTimeEntry = useAppStore((s) => s.addTimeEntry);
 
+  const addClient = useAppStore((s) => s.addClient);
+  const addProject = useAppStore((s) => s.addProject);
+
   const [activeTab, setActiveTab] = useState<"timer" | "manual" | "tiny">("timer");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const savingRef = useRef(false);
+
+  // Quick-create client state (timer tab)
+  const [showQuickClient, setShowQuickClient] = useState(false);
+  const [quickClientName, setQuickClientName] = useState("");
+  const [quickClientCreating, setQuickClientCreating] = useState(false);
+  const [quickClientError, setQuickClientError] = useState<string | null>(null);
+
+  // Quick-create project state (timer tab)
+  const [showQuickProject, setShowQuickProject] = useState(false);
+  const [quickProjectName, setQuickProjectName] = useState("");
+  const [quickProjectClientId, setQuickProjectClientId] = useState("");
+  const [quickProjectCreating, setQuickProjectCreating] = useState(false);
+  const [quickProjectError, setQuickProjectError] = useState<string | null>(null);
 
   const [manualClientId, setManualClientId] = useState("");
   const [manualProjectId, setManualProjectId] = useState("");
@@ -75,6 +91,11 @@ export default function TimeTrackingPage() {
   }, [timer.isRunning, tickTimer]);
 
   const handleStartTimer = () => {
+    if (!timer.clientId || !timer.projectId) {
+      setSaveError("Select a client and project before starting the timer.");
+      return;
+    }
+    setSaveError(null);
     const isFreshStart = timer.elapsedSeconds === 0;
     updateTimer({
       isRunning: true,
@@ -294,6 +315,129 @@ export default function TimeTrackingPage() {
     }
   };
 
+  /* ─── Quick-create client (inline on timer tab) ─── */
+  const resetQuickClient = useCallback(() => {
+    setShowQuickClient(false);
+    setQuickClientName("");
+    setQuickClientError(null);
+  }, []);
+
+  const handleQuickCreateClient = async () => {
+    if (quickClientCreating) return;
+    const name = quickClientName.trim();
+    if (!name) {
+      setQuickClientError("Client name is required.");
+      return;
+    }
+    setQuickClientError(null);
+    setQuickClientCreating(true);
+    try {
+      const response = await fetch("/api/me/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        message?: string;
+        fieldErrors?: Record<string, string>;
+        client?: { id: string; name: string; company_name: string | null; email: string | null; color: string };
+      } | null;
+      if (!response.ok || !result?.ok || !result.client) {
+        const firstErr = result?.fieldErrors ? Object.values(result.fieldErrors)[0] : null;
+        setQuickClientError(firstErr ?? result?.message ?? "Unable to create client.");
+        return;
+      }
+      addClient({
+        id: result.client.id,
+        userId: "",
+        name: result.client.name,
+        companyName: result.client.company_name ?? null,
+        email: result.client.email ?? null,
+        phone: null,
+        billingAddress: null,
+        notes: null,
+        color: result.client.color,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      updateTimer({ clientId: result.client.id });
+      resetQuickClient();
+    } catch {
+      setQuickClientError("Network error while creating client.");
+    } finally {
+      setQuickClientCreating(false);
+    }
+  };
+
+  /* ─── Quick-create project (inline on timer tab) ─── */
+  const resetQuickProject = useCallback(() => {
+    setShowQuickProject(false);
+    setQuickProjectName("");
+    setQuickProjectClientId("");
+    setQuickProjectError(null);
+  }, []);
+
+  const handleQuickCreateProject = async () => {
+    if (quickProjectCreating) return;
+    const name = quickProjectName.trim();
+    const clientId = quickProjectClientId || timer.clientId;
+    if (!clientId) {
+      setQuickProjectError("Select a client first.");
+      return;
+    }
+    if (!name) {
+      setQuickProjectError("Project name is required.");
+      return;
+    }
+    setQuickProjectError(null);
+    setQuickProjectCreating(true);
+    try {
+      const response = await fetch("/api/me/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: clientId,
+          name,
+          hourly_rate: profile?.defaultHourlyRate ?? 0,
+          billing_increment: (profile?.defaultBillingIncrement ?? "exact") as BillingRule,
+          status: "active",
+        }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        message?: string;
+        fieldErrors?: Record<string, string>;
+        project?: { id: string; name: string; client_id: string };
+      } | null;
+      if (!response.ok || !result?.ok || !result.project) {
+        const firstErr = result?.fieldErrors ? Object.values(result.fieldErrors)[0] : null;
+        setQuickProjectError(firstErr ?? result?.message ?? "Unable to create project.");
+        return;
+      }
+      const created = result.project;
+      addProject({
+        id: created.id,
+        userId: "",
+        clientId: created.client_id,
+        name: created.name,
+        description: null,
+        hourlyRate: profile?.defaultHourlyRate ?? 0,
+        billingIncrement: profile?.defaultBillingIncrement ?? "exact",
+        minimumBillableMinutes: profile?.defaultMinimumBillableMinutes ?? null,
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      updateTimer({ projectId: created.id });
+      resetQuickProject();
+    } catch {
+      setQuickProjectError("Network error while creating project.");
+    } finally {
+      setQuickProjectCreating(false);
+    }
+  };
+
   const timerMinutes = Math.floor(timer.elapsedSeconds / 60);
   const timerHours = Math.floor(timerMinutes / 60);
   const timerMins = timerMinutes % 60;
@@ -373,28 +517,141 @@ export default function TimeTrackingPage() {
         >
           <div className="flex flex-col items-center">
             <div className="w-full max-w-md mb-6 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <select
-                  value={timer.clientId ?? ""}
-                  onChange={(e) => updateTimer({ clientId: e.target.value || null })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                >
-                  <option value="">Select client...</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={timer.projectId ?? ""}
-                  onChange={(e) => updateTimer({ projectId: e.target.value || null })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                >
-                  <option value="">Select project...</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={timer.clientId ?? ""}
+                    onChange={(e) => updateTimer({ clientId: e.target.value || null })}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Select client...</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => { setShowQuickClient(true); setShowQuickProject(false); }}
+                    title="Create new client"
+                    className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-emerald-600 hover:border-emerald-400 transition-colors"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {showQuickClient && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Quick Add Client</span>
+                          <button onClick={resetQuickClient} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                        {quickClientError && <p className="text-xs text-red-600">{quickClientError}</p>}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={quickClientName}
+                            onChange={(e) => setQuickClientName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter" && !quickClientCreating) void handleQuickCreateClient(); }}
+                            placeholder="Client name"
+                            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => void handleQuickCreateClient()}
+                            disabled={quickClientCreating}
+                            className="px-3 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                          >
+                            {quickClientCreating ? "..." : "Add"}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={timer.projectId ?? ""}
+                    onChange={(e) => updateTimer({ projectId: e.target.value || null })}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Select project...</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => { setShowQuickProject(true); setShowQuickClient(false); }}
+                    title="Create new project"
+                    className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-emerald-600 hover:border-emerald-400 transition-colors"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {showQuickProject && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Quick Add Project</span>
+                          <button onClick={resetQuickProject} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                        {quickProjectError && <p className="text-xs text-red-600">{quickProjectError}</p>}
+                        {!timer.clientId && clients.length > 0 && (
+                          <select
+                            value={quickProjectClientId}
+                            onChange={(e) => setQuickProjectClientId(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                          >
+                            <option value="">Select client for project...</option>
+                            {clients.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        )}
+                        {!timer.clientId && clients.length === 0 && (
+                          <p className="text-xs text-amber-600">Create a client first, then add a project.</p>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={quickProjectName}
+                            onChange={(e) => setQuickProjectName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter" && !quickProjectCreating) void handleQuickCreateProject(); }}
+                            placeholder="Project name"
+                            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => void handleQuickCreateProject()}
+                            disabled={quickProjectCreating || (!timer.clientId && !quickProjectClientId)}
+                            className="px-3 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                          >
+                            {quickProjectCreating ? "..." : "Add"}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <input
                 type="text"
                 value={timer.taskNote}
@@ -441,8 +698,8 @@ export default function TimeTrackingPage() {
               {!timer.isRunning ? (
                 <button
                   onClick={() => void handleStartTimer()}
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 sm:px-8 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg"
+                  disabled={isSaving || !timer.clientId || !timer.projectId}
+                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 sm:px-8 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Timer className="w-5 h-5" />
                   {timer.elapsedSeconds > 0 ? "Resume" : "Start Timer"}
