@@ -11,7 +11,8 @@ function decodeBase64Url(input: string) {
   const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
   const padding = normalized.length % 4;
   const padded = padding === 0 ? normalized : normalized + "=".repeat(4 - padding);
-  return Buffer.from(padded, "base64").toString("utf-8");
+  const binary = atob(padded);
+  return new TextDecoder("utf-8").decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
 }
 
 function getSessionIdFromAccessToken(token: string) {

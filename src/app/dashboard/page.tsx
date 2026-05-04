@@ -19,7 +19,15 @@ export default function DashboardPage() {
 
   const draftInvoices = invoices.filter((i) => i.status === "draft");
   const paidInvoices = invoices.filter((i) => i.status === "paid");
-  const paidThisMonth = paidInvoices.reduce((sum, i) => sum + i.totalAmount, 0);
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const paidThisMonth = paidInvoices
+    .filter((i) => {
+      const d = new Date(i.updatedAt);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((sum, i) => sum + i.totalAmount, 0);
 
   const recentEntries = timeEntries.slice(0, 5);
   const recentInvoices = invoices.slice(0, 5);

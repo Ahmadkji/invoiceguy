@@ -1,4 +1,5 @@
 import { BillingRule } from "@/lib/types";
+import { calculateLineAmountCents, fromCurrencyCents } from "@/lib/validation";
 
 export function getRuleLabel(rule: BillingRule): string {
   const labels: Record<BillingRule, string> = {
@@ -97,7 +98,7 @@ export function formatTimeRange(startTime: string | null, endTime: string | null
 }
 
 export function calculateAmount(minutes: number, hourlyRate: number): number {
-  return Number(((minutes / 60) * hourlyRate).toFixed(2));
+  return fromCurrencyCents(calculateLineAmountCents(minutes / 60, hourlyRate));
 }
 
 export function getBillingRuleConfig(rule: BillingRule): {

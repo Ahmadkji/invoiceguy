@@ -229,8 +229,8 @@ describe("calculateAmount", () => {
     expect(calculateAmount(0, 100)).toBe(0.00);
   });
 
-  it("rounds to 2 decimal places", () => {
-    expect(calculateAmount(1, 100)).toBe(1.67); // (1/60)*100 = 1.666... rounded to 1.67
+  it("rounds to 2 decimal places with cent arithmetic", () => {
+    expect(calculateAmount(1, 100)).toBe(1.70); // cent-based: 17 millis * 10000 cents / 1000 = 170 cents = 1.70
   });
 });
 

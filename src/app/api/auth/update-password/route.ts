@@ -23,10 +23,11 @@ export async function POST(request: NextRequest) {
 
   const { supabase, withCookies } = createRouteClient(request);
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (userError || !user) {
     return NextResponse.json(
       { ok: false, message: "Your reset session is missing or expired. Request a new reset link." },
       { status: 401 },
@@ -40,6 +41,11 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Fetch session only for audit logging (not for auth decisions)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   await logAuthSessionEvent(
     supabase,

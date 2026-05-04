@@ -2,14 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig } from "./config";
 import { getSupabaseCookieOptions } from "./cookie-options";
-
-function sanitizeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/dashboard";
-  }
-
-  return value;
-}
+import { getSafeNextPath } from "@/lib/security/paths";
 
 export async function updateSession(request: NextRequest) {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
@@ -58,7 +51,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthEntryRoute) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = sanitizeNextPath(request.nextUrl.searchParams.get("next"));
+    redirectUrl.pathname = getSafeNextPath(request.nextUrl.searchParams.get("next"));
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }

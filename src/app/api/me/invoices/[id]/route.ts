@@ -135,6 +135,7 @@ export async function PATCH(
     .update({ status })
     .eq("id", id)
     .eq("user_id", user.id)
+    .eq("status", currentInvoice.status)
     .select("*")
     .maybeSingle();
 
@@ -155,8 +156,8 @@ export async function PATCH(
 
   if (!data) {
     return NextResponse.json(
-      { ok: false, code: "NOT_FOUND", message: "Invoice not found." },
-      { status: 404 },
+      { ok: false, code: "CONCURRENT_MODIFICATION", message: "Invoice status changed concurrently. Please refresh and try again." },
+      { status: 409 },
     );
   }
 

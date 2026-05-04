@@ -32,6 +32,6 @@ export async function downloadInvoicePdf({ invoiceId, invoiceNumber }: DownloadI
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  window.URL.revokeObjectURL(url);
+  setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
