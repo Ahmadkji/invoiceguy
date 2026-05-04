@@ -205,13 +205,13 @@ describe("validateCreateInvoicePayload", () => {
     }
   });
 
-  it("accepts all valid detail levels and normalizes to detailed", () => {
+  it("accepts all valid detail levels and passes them through", () => {
     const levels = ["simple", "standard", "audit", "detailed"];
     for (const level of levels) {
       const result = validateCreateInvoicePayload({ ...validPayload, detailLevel: level });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.detailLevel).toBe("detailed");
+        expect(result.value.detailLevel).toBe(level);
       }
     }
   });
