@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/invoices/status-badge";
 import { formatCurrency } from "@/lib/billing-rules";
 import { useNow } from "@/lib/hooks/use-now";
 import { downloadInvoicePdf } from "@/lib/invoices/download-pdf";
+import { useAppStore } from "@/lib/store/use-app-store";
 
 type InvoiceDetailResponse = {
   ok?: boolean;
@@ -42,6 +43,8 @@ export default function InvoicePreviewPage() {
   const now = useNow();
   const params = useParams();
   const invoiceId = params.id as string;
+  const updateInvoiceInStore = useAppStore((s) => s.updateInvoice);
+  const invalidateData = useAppStore((s) => s.invalidateData);
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
@@ -157,6 +160,8 @@ export default function InvoicePreviewPage() {
       }
 
       setInvoice(result.invoice);
+      updateInvoiceInStore(result.invoice);
+      invalidateData();
       setIsUpdatingStatus(false);
     } catch {
       setError("Network error while updating invoice status.");

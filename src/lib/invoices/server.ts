@@ -9,6 +9,7 @@ import {
   toNullableString,
   isUuid,
   isIsoDate,
+  isValidCurrency,
   toCurrencyCents,
   fromCurrencyCents,
   calculateLineAmountCents,
@@ -561,7 +562,7 @@ export function validateCreateInvoicePayload(payload: unknown): InvalidResult | 
   }
 
   const currency = toNullableString(body.currency);
-  if (currency && !/^([A-Z]{3}|[^A-Za-z0-9\s]{1,3})$/.test(currency)) {
+  if (currency && !isValidCurrency(currency)) {
     fieldErrors.currency = "Currency format is invalid.";
   }
 

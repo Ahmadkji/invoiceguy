@@ -52,6 +52,20 @@ export default function TimeTrackingPage() {
   const [tinyTaskNote, setTinyTaskNote] = useState("");
   const [tinyDuration, setTinyDuration] = useState<number>(5);
 
+  const formatLocalDateInput = (value: Date | string) => {
+    const date = typeof value === "string" ? new Date(value) : value;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const addDays = (dateValue: string, days: number) => {
+    const date = new Date(`${dateValue}T00:00:00`);
+    date.setDate(date.getDate() + days);
+    return formatLocalDateInput(date);
+  };
+
   useEffect(() => {
     if (!timer.isRunning) return;
     const interval = setInterval(() => {
@@ -106,10 +120,15 @@ export default function TimeTrackingPage() {
     const minimumMinutes = project?.minimumBillableMinutes ?? profile?.defaultMinimumBillableMinutes ?? null;
 
     let actualMinutes = manualDuration;
+    let overnightEnd = false;
     if (manualStartTime && manualEndTime) {
       const [sh, sm] = manualStartTime.split(":").map(Number);
       const [eh, em] = manualEndTime.split(":").map(Number);
-      const diffMinutes = (eh * 60 + em) - (sh * 60 + sm);
+      let diffMinutes = (eh * 60 + em) - (sh * 60 + sm);
+      if (diffMinutes < 0) {
+        diffMinutes += 1440;
+        overnightEnd = true;
+      }
       if (diffMinutes > 0) actualMinutes = diffMinutes;
     }
     if (actualMinutes <= 0) {
@@ -130,7 +149,9 @@ export default function TimeTrackingPage() {
         projectId: manualProjectId,
         entryDate: manualDate,
         startTime: manualStartTime ? localTimeToIso(manualDate, manualStartTime) : null,
-        endTime: manualEndTime ? localTimeToIso(manualDate, manualEndTime) : null,
+        endTime: manualEndTime
+          ? localTimeToIso(overnightEnd ? addDays(manualDate, 1) : manualDate, manualEndTime)
+          : null,
         actualMinutes,
         billedMinutes,
         hourlyRate,
@@ -229,7 +250,7 @@ export default function TimeTrackingPage() {
     const amount = calculateAmount(billedMinutes, hourlyRate);
     const startTime = timer.startTime;
     const endTime = new Date(new Date(startTime).getTime() + timer.elapsedSeconds * 1000).toISOString();
-    const now = new Date().toISOString();
+    const entryDate = formatLocalDateInput(startTime);
 
     if (savingRef.current) return;
     setIsSaving(true);
@@ -243,7 +264,7 @@ export default function TimeTrackingPage() {
         body: JSON.stringify({
           clientId,
           projectId,
-          entryDate: now.split("T")[0],
+          entryDate,
           startTime,
           endTime,
           actualMinutes,

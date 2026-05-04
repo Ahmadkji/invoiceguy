@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { BillingRule } from "@/lib/types";
+import { BILLING_RULES, isValidCurrency } from "@/lib/validation";
 import { createRouteClient } from "@/lib/supabase/route";
 import { hasAllowedOrigin } from "@/lib/security/request";
 import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
@@ -135,21 +136,62 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Invalid request." }, { status: 400 });
   }
 
+  const fieldErrors: Record<string, string> = {};
+  const billingRule = (BILLING_RULES as readonly string[]).includes(body.defaultBillingIncrement)
+    ? (body.defaultBillingIncrement as BillingRule)
+    : null;
+  const defaultCurrency = body.defaultCurrency.trim();
+  const defaultHourlyRate = toNullableDecimal(body.defaultHourlyRate);
+  const defaultMinimumBillableMinutes = toNullableInteger(body.defaultMinimumBillableMinutes);
+  const taxPercentage = toNullableDecimal(body.taxPercentage);
+  const nextNum = toNullableInteger(body.nextInvoiceNumber);
+  const dueDays = toNullableInteger(body.defaultDueDays);
+  if (!billingRule) {
+    fieldErrors.defaultBillingIncrement = "Invalid billing increment.";
+  }
+  if (!defaultCurrency || !isValidCurrency(defaultCurrency)) {
+    fieldErrors.defaultCurrency = "Use a 3-letter code like USD or a 1-3 symbol currency like $.";
+  }
+  if (body.invoiceNumberPrefix.trim().length > 20) {
+    fieldErrors.invoiceNumberPrefix = "Prefix must be 20 characters or less.";
+  }
+  if (nextNum !== null && nextNum < 1) {
+    fieldErrors.nextInvoiceNumber = "Must be 1 or greater.";
+  }
+  if (dueDays !== null && (dueDays < 1 || dueDays > 365)) {
+    fieldErrors.defaultDueDays = "Must be between 1 and 365.";
+  }
+  if (defaultHourlyRate !== null && (!Number.isFinite(defaultHourlyRate) || defaultHourlyRate < 0)) {
+    fieldErrors.defaultHourlyRate = "Hourly rate must be zero or a positive number.";
+  }
+  if (
+    defaultMinimumBillableMinutes !== null &&
+    (!Number.isFinite(defaultMinimumBillableMinutes) || defaultMinimumBillableMinutes < 0)
+  ) {
+    fieldErrors.defaultMinimumBillableMinutes = "Minimum billable minutes must be zero or a positive number.";
+  }
+  if (taxPercentage !== null && (!Number.isFinite(taxPercentage) || taxPercentage < 0 || taxPercentage > 100)) {
+    fieldErrors.taxPercentage = "Tax percentage must be between 0 and 100.";
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    return NextResponse.json({ ok: false, message: "Validation failed.", fieldErrors }, { status: 400 });
+  }
+
   const payload = {
     user_id: user.id,
     business_name: body.businessName.trim() || "My Business",
     full_name: body.fullName.trim() || "New User",
     email: body.email.trim(),
     address: body.address.trim() || null,
-    default_hourly_rate: toNullableDecimal(body.defaultHourlyRate) ?? 0,
-    default_billing_increment: body.defaultBillingIncrement,
-    default_minimum_billable_minutes: toNullableInteger(body.defaultMinimumBillableMinutes),
-    default_currency: body.defaultCurrency,
+    default_hourly_rate: defaultHourlyRate ?? 0,
+    default_billing_increment: billingRule,
+    default_minimum_billable_minutes: defaultMinimumBillableMinutes,
+    default_currency: defaultCurrency,
     invoice_number_prefix: body.invoiceNumberPrefix.trim() || "INV",
-    next_invoice_number: toNullableInteger(body.nextInvoiceNumber) ?? 1,
-    default_due_days: toNullableInteger(body.defaultDueDays) ?? 14,
+    next_invoice_number: nextNum ?? 1,
+    default_due_days: dueDays ?? 14,
     tax_label: body.taxLabel.trim() || null,
-    tax_percentage: toNullableDecimal(body.taxPercentage),
+    tax_percentage: taxPercentage,
     payment_instructions: body.paymentInstructions.trim() || null,
     default_invoice_notes: body.defaultInvoiceNotes.trim() || null,
   };
@@ -159,7 +201,10 @@ export async function PUT(request: NextRequest) {
   });
 
   if (upsertError) {
-    return NextResponse.json({ ok: false, message: upsertError.message }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, message: "Failed to save profile. Please check your input and try again." },
+      { status: 400 },
+    );
   }
 
   return withCookies(NextResponse.json({ ok: true }));

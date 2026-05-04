@@ -38,9 +38,9 @@ export default function InvoicesPage() {
   const clients = useAppStore((s) => s.clients);
   const isDataLoading = useAppStore((s) => s.isDataLoading);
   const dataError = useAppStore((s) => s.dataError);
-  const paidThisMonth = useAppStore((s) => s.paidThisMonth);
   const paidBilledMinutes = useAppStore((s) => s.paidBilledMinutes);
   const updateInvoiceInStore = useAppStore((s) => s.updateInvoice);
+  const invalidateData = useAppStore((s) => s.invalidateData);
   const now = useNow();
   const [error, setError] = useState<string | null>(null);
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
@@ -69,12 +69,13 @@ export default function InvoicesPage() {
       }
 
       updateInvoiceInStore(result.invoice);
+      invalidateData();
       setPendingInvoiceId(null);
     } catch {
       setError("Network error while updating invoice status.");
       setPendingInvoiceId(null);
     }
-  }, [updateInvoiceInStore]);
+  }, [updateInvoiceInStore, invalidateData]);
 
   const handleDownloadPdf = useCallback(async (invoiceId: string, invoiceNumber: string) => {
     setPendingPdfInvoiceId(invoiceId);
@@ -102,6 +103,19 @@ export default function InvoicesPage() {
     const outstanding = invoices
       .filter((invoice) => invoice.status === "draft" || invoice.status === "sent")
       .reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+    const currentDate = new Date(now);
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    const paidThisMonth = invoices
+      .filter((invoice) => {
+        if (invoice.status !== "paid") {
+          return false;
+        }
+
+        const updatedAt = new Date(invoice.updatedAt);
+        return updatedAt.getMonth() === currentMonth && updatedAt.getFullYear() === currentYear;
+      })
+      .reduce((sum, invoice) => sum + invoice.totalAmount, 0);
 
     const overdue = invoices.filter((invoice) => {
       if (!invoice.dueDate || invoice.status === "paid" || invoice.status === "void") {
@@ -118,7 +132,7 @@ export default function InvoicesPage() {
       total: invoices.length,
       totalHours: paidBilledMinutes / 60,
     };
-  }, [invoices, paidThisMonth, paidBilledMinutes, now]);
+  }, [invoices, paidBilledMinutes, now]);
 
   const statusFilters: { key: InvoiceStatus | "all"; label: string; count: number }[] = [
     { key: "all", label: "All", count: invoices.length },

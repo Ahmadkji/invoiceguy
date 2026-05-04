@@ -84,6 +84,12 @@ export function isIsoDate(value: string) {
   return parsed.toISOString().slice(0, 10) === value;
 }
 
+export const CURRENCY_PATTERN = /^([A-Z]{3}|[^A-Za-z0-9\s]{1,3})$/;
+
+export function isValidCurrency(value: string) {
+  return CURRENCY_PATTERN.test(value);
+}
+
 // ── Currency-accurate arithmetic (shared between client & server) ──────────
 
 export function toCurrencyCents(value: number) {
