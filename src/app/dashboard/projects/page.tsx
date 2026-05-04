@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { FolderKanban, Plus, X } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
@@ -279,13 +280,17 @@ export default function ProjectsPage() {
           const client = clients.find((c) => c.id === project.clientId);
           const stats = getProjectStats(project.id);
           return (
-            <motion.div
+            <Link
               key={project.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-white rounded-xl border border-slate-100 p-6 hover:shadow-md transition-shadow"
+              href={`/dashboard/projects/${project.id}`}
+              className="block"
             >
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white rounded-xl border border-slate-100 p-6 hover:shadow-md transition-shadow"
+              >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div className="flex items-start gap-4">
                   <div
@@ -327,7 +332,8 @@ export default function ProjectsPage() {
                   <div className="text-sm font-semibold text-emerald-600 font-mono-nums">{formatCurrency(stats.uninvoicedAmount)}</div>
                 </div>
               </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           );
         })}
       </div>

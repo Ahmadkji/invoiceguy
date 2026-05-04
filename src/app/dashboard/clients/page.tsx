@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Mail, Building2, Plus, X } from "lucide-react";
 import { formatCurrency } from "@/lib/billing-rules";
@@ -260,13 +261,17 @@ export default function ClientsPage() {
         {clients.map((client, index) => {
           const stats = getClientStats(client.id);
           return (
-            <motion.div
+            <Link
               key={client.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-white rounded-xl border border-slate-100 p-4 sm:p-6 hover:shadow-lg hover:shadow-slate-200/50 transition-all group"
+              href={`/dashboard/clients/${client.id}`}
+              className="block"
             >
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white rounded-xl border border-slate-100 p-4 sm:p-6 hover:shadow-lg hover:shadow-slate-200/50 transition-all group"
+              >
               <div className="flex items-start justify-between mb-4">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
@@ -299,7 +304,8 @@ export default function ClientsPage() {
                   {stats.projectCount} active project{stats.projectCount !== 1 ? "s" : ""}
                 </div>
               </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           );
         })}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Timer, Plus, Zap, CheckCircle, X, UserPlus, FolderPlus } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
@@ -233,7 +234,10 @@ export default function TimeTrackingPage() {
         amount,
         taskNote: tinyTaskNote.trim(),
         internalNote: null,
-        billingRuleSnapshot: getBillingRuleConfig(rule),
+        billingRuleSnapshot: {
+          ...getBillingRuleConfig(rule),
+          entryKind: "tiny_task",
+        },
         status: "uninvoiced",
       });
       addTimeEntry(entry);
@@ -910,14 +914,41 @@ export default function TimeTrackingPage() {
                 className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between transition-colors gap-2 hover:bg-slate-50"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="w-2 h-2 rounded-full flex-shrink-0"
+                  <Link
+                    href={`/dashboard/time/${entry.id}`}
+                    className="w-2 h-2 rounded-full shrink-0 hover:scale-150 transition-transform"
                     style={{ backgroundColor: client?.color || "#94A3B8" }}
+                    title="View entry details"
                   />
                   <div className="min-w-0">
-                    <span className="text-sm font-medium truncate text-slate-900">{entry.taskNote}</span>
+                    <Link
+                      href={`/dashboard/time/${entry.id}`}
+                      className="text-sm font-medium truncate text-slate-900 hover:text-emerald-600 transition-colors"
+                    >
+                      {entry.taskNote}
+                    </Link>
                     <div className="text-xs text-slate-400 truncate">
-                      {client?.name} • {project?.name} • {entry.entryDate}
+                      {client ? (
+                        <Link
+                          href={`/dashboard/clients/${client.id}`}
+                          className="hover:text-emerald-600 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {client.name}
+                        </Link>
+                      ) : "Unknown"}
+                      {" \u2022 "}
+                      {project ? (
+                        <Link
+                          href={`/dashboard/projects/${project.id}`}
+                          className="hover:text-emerald-600 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {project.name}
+                        </Link>
+                      ) : "Unknown"}
+                      {" \u2022 "}
+                      {entry.entryDate}
                     </div>
                   </div>
                 </div>
