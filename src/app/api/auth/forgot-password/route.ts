@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import { createRouteClient } from "@/lib/supabase/route";
 import { getClientIp, hasAllowedOrigin } from "@/lib/security/request";
 import { getSafeNextPath } from "@/lib/security/paths";
@@ -18,8 +18,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Forbidden." }, { status: 403 });
   }
 
+  const { supabase, withCookies } = createRouteClient(request);
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit(`auth:forgot:ip:${ip}`, 10, 60_000);
+  const ipLimit = await checkRateLimitWithProvider(`auth:forgot:ip:${ip}`, 10, 60_000, { supabase });
   if (!ipLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many requests. Try again shortly." },
@@ -49,7 +50,6 @@ export async function POST(request: NextRequest) {
       : `/update-password?next=${encodeURIComponent(nextPath)}`;
   callbackUrl.searchParams.set("next", updatePath);
 
-  const { supabase, withCookies } = createRouteClient(request);
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: callbackUrl.toString(),
   });

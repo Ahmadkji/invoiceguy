@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     supabase.from("projects").select("id,client_id").eq("user_id", user.id).limit(pageSize),
     supabase
       .from("time_entries")
-      .select("client_id,status,is_billable,amount")
+      .select("client_id,status,invoice_id,amount")
       .eq("user_id", user.id)
       .limit(pageSize),
   ]);

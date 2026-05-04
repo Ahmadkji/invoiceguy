@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import { createRouteClient } from "@/lib/supabase/route";
 import { getClientIp, hasAllowedOrigin } from "@/lib/security/request";
 import { logAuthSessionEvent } from "@/lib/security/auth-events";
@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Forbidden." }, { status: 403 });
   }
 
+  const { supabase, withCookies } = createRouteClient(request);
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit(`auth:signin:ip:${ip}`, 20, 60_000);
+  const ipLimit = await checkRateLimitWithProvider(`auth:signin:ip:${ip}`, 20, 60_000, { supabase });
   if (!ipLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many attempts. Try again shortly." },
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   // 30 per email per 15 min — enough headroom for integration test suites
   // while still protecting against brute-force in production.
-  const emailLimit = checkRateLimit(`auth:signin:email:${email}`, 30, 15 * 60_000);
+  const emailLimit = await checkRateLimitWithProvider(`auth:signin:email:${email}`, 30, 15 * 60_000, { supabase });
   if (!emailLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many attempts. Try again later." },
@@ -58,7 +59,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { supabase, withCookies } = createRouteClient(request);
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.session) {

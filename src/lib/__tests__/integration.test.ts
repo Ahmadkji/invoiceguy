@@ -537,7 +537,7 @@ describe("POST /api/me/invoices - creation", () => {
       clientId: testClientId,
       invoiceDate: "2024-06-15",
       dueDate: "2024-07-15",
-      detailLevel: "standard",
+      detailLevel: "detailed",
       status: "draft",
       taxPercentage: 0,
       discountAmount: 0,
@@ -557,7 +557,7 @@ describe("POST /api/me/invoices - creation", () => {
     const payload = {
       clientId: testClientId,
       invoiceDate: "2024-06-15",
-      detailLevel: "standard",
+      detailLevel: "detailed",
       taxPercentage: 10,
       invoiceNumber: `TEST-${ts}-B`,
       lineItems: [

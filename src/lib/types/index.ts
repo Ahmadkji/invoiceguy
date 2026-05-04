@@ -36,17 +36,7 @@ export interface Project {
   updatedAt: string;
 }
 
-export type NonBillableCategory = "admin" | "client_communication" | "internal" | "learning" | "other";
-
-export const NON_BILLABLE_LABELS: Record<NonBillableCategory, string> = {
-  admin: "Admin",
-  client_communication: "Client calls",
-  internal: "Internal",
-  learning: "Learning",
-  other: "Other",
-};
-
-export type TimeEntryStatus = "uninvoiced" | "invoiced" | "non_billable";
+export type TimeEntryStatus = "uninvoiced" | "invoiced";
 
 export interface TimeEntry {
   id: string;
@@ -63,8 +53,6 @@ export interface TimeEntry {
   amount: number;
   taskNote: string;
   internalNote: string | null;
-  isBillable: boolean;
-  nonBillableCategory: NonBillableCategory | null;
   billingRuleSnapshot: {
     rule: BillingRule;
     incrementMinutes: number | null;
@@ -76,7 +64,7 @@ export interface TimeEntry {
 }
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "void";
-export type InvoiceDetailLevel = "simple" | "standard" | "audit";
+export type InvoiceDetailLevel = "detailed";
 
 export interface Invoice {
   id: string;
@@ -125,8 +113,7 @@ export interface InvoiceDraftLineItem {
   quantity: number;
   rate: number;
   amount: number;
-  actualMinutes: number;
-  billedMinutes: number;
+  minutes: number;
   billingRule: BillingRule | null;
 }
 

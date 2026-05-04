@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Timer, DollarSign, Bell, Menu, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -42,8 +43,9 @@ export function PulseHeader() {
   const timeEntries = useAppStore((s) => s.timeEntries);
   const profile = useAppStore((s) => s.profile);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const uninvoicedEntries = timeEntries.filter((e) => e.status === "uninvoiced" && e.isBillable);
+  const uninvoicedEntries = timeEntries.filter((e) => e.invoiceId === null);
   const totalUninvoicedMinutes = uninvoicedEntries.reduce((sum, e) => sum + e.billedMinutes, 0);
   const totalUninvoicedAmount = uninvoicedEntries.reduce((sum, e) => sum + e.amount, 0);
 
@@ -73,7 +75,15 @@ export function PulseHeader() {
 
       {/* Right: Metrics & actions */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Uninvoiced amount */}
+        {/* Mobile: condensed uninvoiced amount */}
+        <div className="sm:hidden flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg">
+          <DollarSign className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-xs font-semibold text-slate-700 font-mono-nums">
+            {formatCurrency(totalUninvoicedAmount)}
+          </span>
+        </div>
+
+        {/* Desktop: Uninvoiced amount */}
         <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg">
           <DollarSign className="w-4 h-4 text-slate-400" />
           <div>
@@ -104,16 +114,28 @@ export function PulseHeader() {
         {/* Logout */}
         <button
           onClick={async () => {
-            await fetch("/api/auth/signout", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            });
+            if (isSigningOut) return;
+            setIsSigningOut(true);
+            try {
+              const response = await fetch("/api/auth/signout", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              });
+              if (!response.ok) {
+                setIsSigningOut(false);
+                return;
+              }
+            } catch {
+              setIsSigningOut(false);
+              return;
+            }
             router.push("/signin");
             router.refresh();
           }}
-          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+          disabled={isSigningOut}
+          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Sign out"
         >
           <LogOut className="w-5 h-5" />

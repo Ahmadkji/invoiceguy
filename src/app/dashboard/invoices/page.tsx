@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/billing-rules";
+import { downloadInvoicePdf } from "@/lib/invoices/download-pdf";
 import { Invoice, InvoiceStatus } from "@/lib/types";
 import { StatusBadge } from "@/components/invoices/status-badge";
 import { useAppStore } from "@/lib/store/use-app-store";
@@ -43,6 +44,7 @@ export default function InvoicesPage() {
   const now = useNow();
   const [error, setError] = useState<string | null>(null);
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
+  const [pendingPdfInvoiceId, setPendingPdfInvoiceId] = useState<string | null>(null);
   const [filter, setFilter] = useState<InvoiceStatus | "all">("all");
 
   const updateInvoiceStatus = useCallback(async (invoiceId: string, status: InvoiceStatus) => {
@@ -73,6 +75,19 @@ export default function InvoicesPage() {
       setPendingInvoiceId(null);
     }
   }, [updateInvoiceInStore]);
+
+  const handleDownloadPdf = useCallback(async (invoiceId: string, invoiceNumber: string) => {
+    setPendingPdfInvoiceId(invoiceId);
+    setError(null);
+
+    try {
+      await downloadInvoicePdf({ invoiceId, invoiceNumber });
+      setPendingPdfInvoiceId(null);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Unable to download invoice PDF.");
+      setPendingPdfInvoiceId(null);
+    }
+  }, []);
 
   const clientById = useMemo(() => {
     return new Map(clients.map((client) => [client.id, client]));
@@ -273,147 +288,270 @@ export default function InvoicesPage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px]">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Invoice</th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Client</th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Date</th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Due</th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Status</th>
-                      <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Amount</th>
-                      <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInvoices.map((invoice, index) => {
-                      const client = clientById.get(invoice.clientId);
-                      const isOverdue =
-                        invoice.dueDate &&
-                        new Date(invoice.dueDate).getTime() < now &&
-                        invoice.status !== "paid";
-                      const isMutating = pendingInvoiceId === invoice.id;
+              <>
+                <div className="divide-y divide-slate-100 md:hidden">
+                  {filteredInvoices.map((invoice, index) => {
+                    const client = clientById.get(invoice.clientId);
+                    const isOverdue =
+                      invoice.dueDate &&
+                      new Date(invoice.dueDate).getTime() < now &&
+                      invoice.status !== "paid";
+                    const isMutating = pendingInvoiceId === invoice.id;
+                    const isDownloadingPdf = pendingPdfInvoiceId === invoice.id;
 
-                      return (
-                        <motion.tr
-                          key={invoice.id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.03 }}
-                          className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/80 transition-colors group"
-                        >
-                          <td className="py-4 px-5">
-                            <Link
-                              href={`/dashboard/invoices/${invoice.id}`}
-                              className="font-mono-nums font-bold text-sm text-slate-900 hover:text-emerald-600 transition-colors flex items-center gap-2"
-                            >
-                              {invoice.invoiceNumber}
-                              <ChevronRight className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </Link>
-                          </td>
+                    return (
+                      <motion.div
+                        key={invoice.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.03 }}
+                        className="p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <Link
+                            href={`/dashboard/invoices/${invoice.id}`}
+                            prefetch={false}
+                            className="font-mono-nums font-bold text-sm text-slate-900 hover:text-emerald-600 transition-colors"
+                          >
+                            {invoice.invoiceNumber}
+                          </Link>
+                          <StatusBadge status={invoice.status} overdue={Boolean(isOverdue)} size="sm" />
+                        </div>
 
-                          <td className="py-4 px-5">
-                            <div className="flex items-center gap-2.5">
-                              <div
-                                className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
-                                style={{ backgroundColor: client?.color || "#64748B" }}
-                              >
-                                {client?.name?.charAt(0) || "?"}
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-slate-900">{client?.name}</div>
-                                {client?.companyName && (
-                                  <div className="text-xs text-slate-400">{client.companyName}</div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
+                        <div className="mt-3 flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            style={{ backgroundColor: client?.color || "#64748B" }}
+                          >
+                            {client?.name?.charAt(0) || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-slate-900 truncate">{client?.name ?? "Unknown client"}</div>
+                            {client?.companyName && (
+                              <div className="text-xs text-slate-400 truncate">{client.companyName}</div>
+                            )}
+                          </div>
+                        </div>
 
-                          <td className="py-4 px-5">
-                            <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                          <div>
+                            <div className="uppercase tracking-wider text-[10px] text-slate-400">Invoice date</div>
+                            <div className="mt-1 text-sm text-slate-700">
                               {new Date(invoice.invoiceDate).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
                                 year: "numeric",
                               })}
                             </div>
-                          </td>
-
-                          <td className="py-4 px-5">
-                            {invoice.dueDate ? (
-                              <div className="flex items-center gap-1.5 text-sm">
-                                <Clock className={`w-3.5 h-3.5 ${isOverdue ? "text-red-400" : "text-slate-400"}`} />
-                                <span className={isOverdue ? "text-red-600 font-semibold" : "text-slate-600"}>
-                                  {new Date(invoice.dueDate).toLocaleDateString("en-US", {
+                          </div>
+                          <div>
+                            <div className="uppercase tracking-wider text-[10px] text-slate-400">Due</div>
+                            <div className={`mt-1 text-sm ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>
+                              {invoice.dueDate
+                                ? new Date(invoice.dueDate).toLocaleDateString("en-US", {
                                     month: "short",
                                     day: "numeric",
-                                  })}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-4 px-5">
-                            <StatusBadge status={invoice.status} overdue={Boolean(isOverdue)} size="sm" />
-                          </td>
-
-                          <td className="py-4 px-5 text-right">
-                            <div className="text-sm font-bold text-slate-900 font-mono-nums">
-                              {formatCurrency(invoice.totalAmount)}
+                                  })
+                                : "—"}
                             </div>
-                          </td>
+                          </div>
+                        </div>
 
-                          <td className="py-4 px-5">
-                            <div className="flex items-center justify-end gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="text-sm font-bold text-slate-900 font-mono-nums">
+                            {formatCurrency(invoice.totalAmount)}
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            <Link
+                              href={`/dashboard/invoices/${invoice.id}`}
+                              prefetch={false}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View
+                            </Link>
+                            <button
+                              onClick={() => void handleDownloadPdf(invoice.id, invoice.invoiceNumber)}
+                              disabled={isDownloadingPdf}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              {isDownloadingPdf ? "Downloading..." : "PDF"}
+                            </button>
+                            {invoice.status === "draft" && (
+                              <button
+                                onClick={() => void updateInvoiceStatus(invoice.id, "sent")}
+                                disabled={isMutating}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                {isMutating ? "Saving..." : "Send"}
+                              </button>
+                            )}
+                            {invoice.status === "sent" && (
+                              <button
+                                onClick={() => void updateInvoiceStatus(invoice.id, "paid")}
+                                disabled={isMutating}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                {isMutating ? "Saving..." : "Paid"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full min-w-[700px]">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Invoice</th>
+                        <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Client</th>
+                        <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Date</th>
+                        <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Due</th>
+                        <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Status</th>
+                        <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Amount</th>
+                        <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400 py-3 px-5">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredInvoices.map((invoice, index) => {
+                        const client = clientById.get(invoice.clientId);
+                        const isOverdue =
+                          invoice.dueDate &&
+                          new Date(invoice.dueDate).getTime() < now &&
+                          invoice.status !== "paid";
+                        const isMutating = pendingInvoiceId === invoice.id;
+                        const isDownloadingPdf = pendingPdfInvoiceId === invoice.id;
+
+                        return (
+                          <motion.tr
+                            key={invoice.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.03 }}
+                            className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/80 transition-colors group"
+                          >
+                            <td className="py-4 px-5">
                               <Link
                                 href={`/dashboard/invoices/${invoice.id}`}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                                title="View invoice"
+                                prefetch={false}
+                                className="font-mono-nums font-bold text-sm text-slate-900 hover:text-emerald-600 transition-colors flex items-center gap-2"
                               >
-                                <Eye className="w-3.5 h-3.5" />
-                                View
+                                {invoice.invoiceNumber}
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                               </Link>
-                              <button
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                                title="Download PDF"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                PDF
-                              </button>
-                              {invoice.status === "draft" && (
-                                <button
-                                  onClick={() => void updateInvoiceStatus(invoice.id, "sent")}
-                                  disabled={isMutating}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                                  title="Mark as sent"
+                            </td>
+
+                            <td className="py-4 px-5">
+                              <div className="flex items-center gap-2.5">
+                                <div
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+                                  style={{ backgroundColor: client?.color || "#64748B" }}
                                 >
-                                  <Send className="w-3.5 h-3.5" />
-                                  {isMutating ? "Saving..." : "Send"}
-                                </button>
+                                  {client?.name?.charAt(0) || "?"}
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900">{client?.name}</div>
+                                  {client?.companyName && (
+                                    <div className="text-xs text-slate-400">{client.companyName}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-5">
+                              <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                {new Date(invoice.invoiceDate).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-5">
+                              {invoice.dueDate ? (
+                                <div className="flex items-center gap-1.5 text-sm">
+                                  <Clock className={`w-3.5 h-3.5 ${isOverdue ? "text-red-400" : "text-slate-400"}`} />
+                                  <span className={isOverdue ? "text-red-600 font-semibold" : "text-slate-600"}>
+                                    {new Date(invoice.dueDate).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-slate-400">—</span>
                               )}
-                              {invoice.status === "sent" && (
-                                <button
-                                  onClick={() => void updateInvoiceStatus(invoice.id, "paid")}
-                                  disabled={isMutating}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                                  title="Mark as paid"
+                            </td>
+
+                            <td className="py-4 px-5">
+                              <StatusBadge status={invoice.status} overdue={Boolean(isOverdue)} size="sm" />
+                            </td>
+
+                            <td className="py-4 px-5 text-right">
+                              <div className="text-sm font-bold text-slate-900 font-mono-nums">
+                                {formatCurrency(invoice.totalAmount)}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-5">
+                              <div className="flex items-center justify-end gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                <Link
+                                  href={`/dashboard/invoices/${invoice.id}`}
+                                  prefetch={false}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                                  title="View invoice"
                                 >
-                                  <CheckCircle className="w-3.5 h-3.5" />
-                                  {isMutating ? "Saving..." : "Paid"}
+                                  <Eye className="w-3.5 h-3.5" />
+                                  View
+                                </Link>
+                                <button
+                                  onClick={() => void handleDownloadPdf(invoice.id, invoice.invoiceNumber)}
+                                  disabled={isDownloadingPdf}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                                  title="Download PDF"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  {isDownloadingPdf ? "Downloading..." : "PDF"}
                                 </button>
-                              )}
-                            </div>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                {invoice.status === "draft" && (
+                                  <button
+                                    onClick={() => void updateInvoiceStatus(invoice.id, "sent")}
+                                    disabled={isMutating}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    title="Mark as sent"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    {isMutating ? "Saving..." : "Send"}
+                                  </button>
+                                )}
+                                {invoice.status === "sent" && (
+                                  <button
+                                    onClick={() => void updateInvoiceStatus(invoice.id, "paid")}
+                                    disabled={isMutating}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    title="Mark as paid"
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    {isMutating ? "Saving..." : "Paid"}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </motion.div>
         </>

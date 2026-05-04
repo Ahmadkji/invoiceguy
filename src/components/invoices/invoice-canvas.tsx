@@ -1,11 +1,10 @@
 "use client";
 
 import { Mail, MapPin, Phone } from "lucide-react";
-import { formatDecimalHours, formatMinutes } from "@/lib/billing-rules";
+import { formatDecimalHours } from "@/lib/billing-rules";
 import {
   Client,
   Invoice,
-  InvoiceDetailLevel,
   InvoiceItem,
   TimeEntry,
   UserProfile,
@@ -22,8 +21,6 @@ interface InvoiceCanvasProps {
   client: Client | undefined;
   profile: UserProfile;
   projects: { id: string; name: string }[];
-  detailLevel: InvoiceDetailLevel;
-  showActualTime: boolean;
   isOverdue: boolean;
 }
 
@@ -59,26 +56,6 @@ function formatServicePeriod(entries: TimeEntry[]) {
   return `${formatLongDate(dates[0])} - ${formatLongDate(dates[dates.length - 1])}`;
 }
 
-function getDetailLevelSummary(
-  detailLevel: InvoiceDetailLevel,
-  showActualTime: boolean
-) {
-  switch (detailLevel) {
-    case "simple":
-      return showActualTime
-        ? "Simple summary with actual-time context."
-        : "Simple summary of billed work.";
-    case "audit":
-      return showActualTime
-        ? "Detailed audit view with actual and billed time."
-        : "Detailed audit view of billed time.";
-    default:
-      return showActualTime
-        ? "Grouped project summary with actual-time context."
-        : "Grouped project summary for clients.";
-  }
-}
-
 export function InvoiceCanvas({
   invoice,
   invoiceItems,
@@ -86,8 +63,6 @@ export function InvoiceCanvas({
   client,
   profile,
   projects,
-  detailLevel,
-  showActualTime,
   isOverdue,
 }: InvoiceCanvasProps) {
   // Prefer snapshot data over live client data for historical accuracy
@@ -108,12 +83,6 @@ export function InvoiceCanvas({
     (sum, item) => sum + item.billedMinutes,
     0
   );
-  const totalActualMinutes = invoiceItems.reduce(
-    (sum, item) => sum + item.actualMinutes,
-    0
-  );
-  const detailLabel = detailLevel.charAt(0).toUpperCase() + detailLevel.slice(1);
-  const detailSummary = getDetailLevelSummary(detailLevel, showActualTime);
   const noteText =
     invoice.notes ||
     "Generated from tracked work entries and the saved billing settings.";
@@ -229,26 +198,13 @@ export function InvoiceCanvas({
               </div>
             )}
 
-            <div className="grid grid-cols-[120px_1fr] gap-3 py-2.5">
-              <span className="font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Detail
-              </span>
-              <div>
-                <div className="text-slate-900">{detailLabel}</div>
-                <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {detailSummary}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
         <LineItemsTable
-          detailLevel={detailLevel}
           invoiceItems={invoiceItems}
           timeEntries={timeEntries}
           projects={projects}
-          showActualTime={showActualTime}
         />
 
         <div className="mt-8 grid gap-8 border-t border-slate-300 pt-8 md:grid-cols-[minmax(0,1fr)_280px] md:items-start">
@@ -258,12 +214,8 @@ export function InvoiceCanvas({
                 Summary
               </p>
               <div className="mt-2 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                <div>{formatDecimalHours(totalBilledMinutes)} billable hrs</div>
-                <div>
-                  {showActualTime
-                    ? `${formatMinutes(totalActualMinutes)} tracked`
-                    : `${invoiceItems.length} line items`}
-                </div>
+                <div>{formatDecimalHours(totalBilledMinutes)} tracked hrs</div>
+                <div>{invoiceItems.length} line items</div>
               </div>
             </div>
 

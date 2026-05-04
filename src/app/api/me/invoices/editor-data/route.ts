@@ -38,8 +38,7 @@ export async function GET(request: NextRequest) {
     .from("time_entries")
     .select("*")
     .eq("user_id", user.id)
-    .eq("is_billable", true)
-    .eq("status", "uninvoiced");
+    .is("invoice_id", null);
 
   if (clientIdParam && isUuid(clientIdParam)) {
     timeEntriesQuery = timeEntriesQuery.eq("client_id", clientIdParam);

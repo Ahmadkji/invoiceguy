@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createRouteClient } from "@/lib/supabase/route";
 import { hasAllowedOrigin } from "@/lib/security/request";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import { mapProjectRow } from "@/lib/invoices/server";
 import { BILLING_RULES } from "@/lib/validation";
 import type { BillingRule } from "@/lib/types";
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const rl = checkRateLimit(`mutate:${user.id}:project-create`, 30, 60_000);
+  const rl = await checkRateLimitWithProvider(`mutate:${user.id}:project-create`, 30, 60_000, { supabase });
   if (!rl.allowed) {
     return NextResponse.json({ ok: false, code: "RATE_LIMITED", message: "Too many requests. Try again later." }, { status: 429 });
   }

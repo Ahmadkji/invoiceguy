@@ -91,6 +91,14 @@ function mapCreateError(error: { code?: string; message?: string; details?: stri
     };
   }
 
+  if (message.includes("INVALID_DETAIL_LEVEL")) {
+    return {
+      status: 400,
+      code: "INVALID_DETAIL_LEVEL",
+      message: "Invalid invoice detail level.",
+    };
+  }
+
   if (message.includes("SUBTOTAL_MISMATCH")) {
     return {
       status: 409,

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import { createRouteClient } from "@/lib/supabase/route";
 import { getClientIp, hasAllowedOrigin } from "@/lib/security/request";
 
@@ -16,8 +16,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Forbidden." }, { status: 403 });
   }
 
+  const { supabase, withCookies } = createRouteClient(request);
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit(`auth:resend:ip:${ip}`, 8, 60_000);
+  const ipLimit = await checkRateLimitWithProvider(`auth:resend:ip:${ip}`, 8, 60_000, { supabase });
   if (!ipLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many requests. Try again shortly." },
@@ -39,7 +40,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { supabase, withCookies } = createRouteClient(request);
   const { error } = await supabase.auth.resend({
     type: "signup",
     email,

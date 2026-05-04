@@ -6,7 +6,6 @@ import type {
   TimeEntry,
   Invoice,
   UserProfile,
-  TimerState,
 } from "@/lib/types";
 
 // Reset store before each test
@@ -52,7 +51,7 @@ const mockProfile: UserProfile = {
   defaultHourlyRate: 100,
   defaultBillingIncrement: "exact",
   defaultMinimumBillableMinutes: null,
-  defaultInvoiceDetailLevel: "standard",
+  defaultInvoiceDetailLevel: "detailed",
   defaultInvoiceNotes: null,
   invoiceNumberPrefix: "INV",
   nextInvoiceNumber: 1,
@@ -107,8 +106,6 @@ const mockTimeEntry: TimeEntry = {
   amount: 100,
   taskNote: "Work done",
   internalNote: null,
-  isBillable: true,
-  nonBillableCategory: null,
   billingRuleSnapshot: { rule: "exact", incrementMinutes: null, minimumMinutes: null },
   status: "uninvoiced",
   createdAt: new Date().toISOString(),
@@ -122,7 +119,7 @@ const mockInvoice: Invoice = {
   invoiceNumber: "INV-001",
   invoiceDate: "2024-06-15",
   dueDate: "2024-07-15",
-  detailLevel: "standard",
+  detailLevel: "detailed",
   subtotal: 1000,
   taxAmount: 0,
   discountAmount: 0,
@@ -295,7 +292,7 @@ describe("invoiceDraft", () => {
       clientId: "client-1",
       invoiceDate: "2024-06-15",
       dueDate: "2024-07-15",
-      detailLevel: "standard" as const,
+      detailLevel: "detailed" as const,
       notes: "",
       paymentInstructions: "",
       taxPercentage: 0,

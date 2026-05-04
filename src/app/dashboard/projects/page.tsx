@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { FolderKanban, Circle, Plus, X } from "lucide-react";
+import { FolderKanban, Plus, X } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
-import { formatCurrency, formatMinutes, getRuleLabel } from "@/lib/billing-rules";
+import { formatCurrency, formatMinutes } from "@/lib/billing-rules";
 import type { BillingRule } from "@/lib/types";
 
 export default function ProjectsPage() {
@@ -30,7 +30,7 @@ export default function ProjectsPage() {
   const [formBillingIncrement, setFormBillingIncrement] = useState<BillingRule>("exact");
 
   const BILLING_OPTIONS: { value: BillingRule; label: string }[] = [
-    { value: "exact", label: "Exact" },
+    { value: "exact", label: "Standard" },
     { value: "round_up_5", label: "Round up 5m" },
     { value: "round_up_10", label: "Round up 10m" },
     { value: "round_up_15", label: "Round up 15m" },
@@ -119,11 +119,10 @@ export default function ProjectsPage() {
 
   const getProjectStats = (projectId: string) => {
     const entries = timeEntries.filter((e) => e.projectId === projectId);
-    const totalMinutes = entries.reduce((sum, e) => sum + e.actualMinutes, 0);
-    const billedMinutes = entries.reduce((sum, e) => sum + e.billedMinutes, 0);
-    const uninvoiced = entries.filter((e) => e.status === "uninvoiced" && e.isBillable);
+    const trackedMinutes = entries.reduce((sum, e) => sum + e.billedMinutes, 0);
+    const uninvoiced = entries.filter((e) => e.invoiceId === null);
     const uninvoicedAmount = uninvoiced.reduce((sum, e) => sum + e.amount, 0);
-    return { totalMinutes, billedMinutes, uninvoicedAmount, entryCount: entries.length };
+    return { trackedMinutes, uninvoicedAmount, entryCount: entries.length };
   };
 
   const statusColors: Record<string, string> = {
@@ -135,14 +134,14 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
           <p className="text-slate-500">Track work across all your projects</p>
         </div>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg active:scale-[0.98]"
+          className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg active:scale-[0.98] self-start"
         >
           <Plus className="w-4 h-4" />
           Add Project
@@ -314,14 +313,10 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-50">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-50">
                 <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Total Time</div>
-                  <div className="text-sm font-semibold text-slate-700 font-mono-nums">{formatMinutes(stats.totalMinutes)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Billed Time</div>
-                  <div className="text-sm font-semibold text-emerald-600 font-mono-nums">{formatMinutes(stats.billedMinutes)}</div>
+                  <div className="text-xs text-slate-400 mb-0.5">Tracked Time</div>
+                  <div className="text-sm font-semibold text-slate-700 font-mono-nums">{formatMinutes(stats.trackedMinutes)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-slate-400 mb-0.5">Entries</div>
@@ -331,16 +326,6 @@ export default function ProjectsPage() {
                   <div className="text-xs text-slate-400 mb-0.5">Uninvoiced</div>
                   <div className="text-sm font-semibold text-emerald-600 font-mono-nums">{formatCurrency(stats.uninvoicedAmount)}</div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-50 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <Circle className="w-3 h-3" />
-                  {getRuleLabel(project.billingIncrement)}
-                </span>
-                {project.minimumBillableMinutes && (
-                  <span>Min: {project.minimumBillableMinutes}m</span>
-                )}
               </div>
             </motion.div>
           );

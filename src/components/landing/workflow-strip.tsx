@@ -158,14 +158,14 @@ export function WorkflowStrip() {
                   )}
                 </div>
                 <div className="flex-1 bg-white rounded-xl border border-slate-100 p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <div className="font-semibold text-slate-900 text-sm">
                         {step.title}
                       </div>
                       <div className="text-xs text-slate-400">{step.desc}</div>
                     </div>
-                    <div className="text-xs font-medium text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1 whitespace-pre-line">
+                    <div className="text-xs font-medium text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1 whitespace-pre-line self-start sm:self-auto">
                       {step.preview}
                     </div>
                   </div>

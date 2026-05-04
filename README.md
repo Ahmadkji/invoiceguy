@@ -18,8 +18,10 @@ cp .env.example .env.local
 
 Required variables:
 
+- `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `RATE_LIMIT_PROVIDER` (`memory` by default, set `supabase` to use DB-backed rate limiting)
 
 3. Run local dev server:
 
@@ -33,6 +35,7 @@ This repo includes these migrations:
 
 - `supabase/migrations/20260426173000_auth_profiles.sql`
 - `supabase/migrations/20260426174500_phase2_core_schema.sql`
+- `supabase/migrations/20260503173000_supabase_rate_limit_provider.sql`
 
 Apply migrations with the Supabase CLI (linked project):
 

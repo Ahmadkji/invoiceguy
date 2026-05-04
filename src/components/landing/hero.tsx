@@ -44,7 +44,7 @@ export function TimeGlassHero() {
   };
 
   return (
-    <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-[#F8FAFC]">
+    <section className="relative min-h-[auto] md:min-h-[90vh] py-14 md:py-0 flex items-center overflow-hidden bg-[#F8FAFC]">
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
         <svg width="100%" height="100%">
@@ -96,7 +96,7 @@ export function TimeGlassHero() {
               </Link>
             </div>
 
-            <div className="flex items-center gap-6 mt-10 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-10 text-sm text-slate-500">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-500" />
                 <span>Work session tracking</span>
@@ -115,7 +115,7 @@ export function TimeGlassHero() {
             transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             className="relative"
           >
-            <div className="relative bg-white rounded-2xl shadow-2xl shadow-slate-200/50 p-8 border border-slate-100">
+            <div className="relative bg-white rounded-2xl shadow-2xl shadow-slate-200/50 p-5 sm:p-8 border border-slate-100">
               {/* Invoice header */}
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
                 <div>
@@ -178,7 +178,7 @@ export function TimeGlassHero() {
             <motion.div
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute -top-4 -right-4 bg-white rounded-xl shadow-lg px-4 py-2 border border-slate-100"
+              className="hidden sm:block absolute -top-4 -right-4 bg-white rounded-xl shadow-lg px-4 py-2 border border-slate-100"
             >
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -189,7 +189,7 @@ export function TimeGlassHero() {
             <motion.div
               animate={{ y: [0, 8, 0] }}
               transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-              className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg px-4 py-2 border border-slate-100"
+              className="hidden sm:block absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg px-4 py-2 border border-slate-100"
             >
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-blue-500" />

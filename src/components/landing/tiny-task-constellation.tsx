@@ -48,7 +48,7 @@ export function TinyTaskConstellation() {
   };
 
   return (
-    <section className="py-24 bg-[#F8FAFC] relative overflow-hidden">
+    <section className="py-20 sm:py-24 bg-[#F8FAFC] relative overflow-hidden">
       {/* Starfield background */}
       <div className="absolute inset-0">
         {stars.map((star, i) => (
@@ -93,7 +93,7 @@ export function TinyTaskConstellation() {
 
         {/* Constellation */}
         <div className="flex justify-center mb-12">
-          <div className="relative w-80 h-80">
+          <div className="relative w-72 h-72 sm:w-80 sm:h-80">
             {/* Orbit rings */}
             <div className="absolute inset-8 rounded-full border border-slate-200/60" />
             <div className="absolute inset-16 rounded-full border border-slate-200/40" />

@@ -18,11 +18,11 @@ import {
   calculateBilledMinutes,
   formatCurrency,
   formatMinutes,
+  formatTimeRange,
   getRuleLabel,
 } from "@/lib/billing-rules";
 import { useAppStore } from "@/lib/store/use-app-store";
 import {
-  InvoiceDetailLevel,
   InvoiceDraft,
   InvoiceDraftLineItem,
   InvoiceStatus,
@@ -99,7 +99,7 @@ function createDefaultInvoiceDraft(profile: UserProfile): InvoiceDraft {
     clientId: "",
     invoiceDate: today,
     dueDate: addDays(today, profile.defaultDueDays),
-    detailLevel: profile.defaultInvoiceDetailLevel,
+    detailLevel: "detailed" as const,
     notes: profile.defaultInvoiceNotes ?? "",
     paymentInstructions: profile.paymentInstructions ?? "",
     taxPercentage: profile.taxPercentage ?? 0,
@@ -117,8 +117,7 @@ function createManualLineItem(defaultRate: number): InvoiceDraftLineItem {
     quantity: 1,
     rate: defaultRate,
     amount: roundMoney(defaultRate),
-    actualMinutes: 60,
-    billedMinutes: 60,
+    minutes: 60,
     billingRule: null,
   };
 }
@@ -144,14 +143,6 @@ function emptyErrors(): DraftErrors {
 
 function sanitizeNumber(value: number, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
-}
-
-function getInvoiceDetailOptions(): { value: InvoiceDetailLevel; label: string }[] {
-  return [
-    { value: "simple", label: "Simple" },
-    { value: "standard", label: "Standard" },
-    { value: "audit", label: "Audit" },
-  ];
 }
 
 export default function NewInvoicePage() {
@@ -242,7 +233,7 @@ export default function NewInvoicePage() {
       clientId: "",
       invoiceDate: getTodayInputValue(),
       dueDate: getTodayInputValue(),
-      detailLevel: "standard",
+      detailLevel: "detailed",
       notes: "",
       paymentInstructions: "",
       taxPercentage: 0,
@@ -268,8 +259,7 @@ export default function NewInvoicePage() {
       .filter(
         (entry) =>
           entry.clientId === draft.clientId &&
-          entry.isBillable &&
-          entry.status === "uninvoiced"
+          entry.invoiceId === null
       )
       .sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
   }, [timeEntries, draft.clientId]);
@@ -329,8 +319,7 @@ export default function NewInvoicePage() {
             quantity,
             rate,
             amount,
-            actualMinutes: lineItem.source === "manual" ? minutes : lineItem.actualMinutes,
-            billedMinutes: lineItem.source === "manual" ? minutes : lineItem.billedMinutes,
+            minutes: lineItem.source === "manual" ? minutes : lineItem.minutes,
           };
         });
 
@@ -387,12 +376,12 @@ export default function NewInvoicePage() {
       return;
     }
 
-    const billedMinutes = calculateBilledMinutes(
+    const minutes = calculateBilledMinutes(
       entry.actualMinutes,
       entry.billingRuleSnapshot.rule,
       entry.billingRuleSnapshot.minimumMinutes
     );
-    const quantity = Number((billedMinutes / 60).toFixed(3));
+    const quantity = Number((minutes / 60).toFixed(3));
     const amount = fromCurrencyCents(calculateLineAmountCents(quantity, entry.hourlyRate));
     const projectName = projectById.get(entry.projectId)?.name;
 
@@ -406,8 +395,7 @@ export default function NewInvoicePage() {
       quantity,
       rate: entry.hourlyRate,
       amount,
-      actualMinutes: entry.actualMinutes,
-      billedMinutes,
+      minutes,
       billingRule: entry.billingRuleSnapshot.rule,
     };
 
@@ -423,6 +411,35 @@ export default function NewInvoicePage() {
       lineItemsById: {},
     }));
   };
+
+  const validateLineItemOnBlur = useCallback(
+    (lineItemId: string) => {
+      const lineItem = draft.lineItems.find((item) => item.id === lineItemId);
+      if (!lineItem) return;
+
+      const lineErrors: string[] = [];
+      if (!lineItem.description.trim()) {
+        lineErrors.push("Description required");
+      }
+      if (sanitizeNumber(lineItem.quantity, 0) <= 0) {
+        lineErrors.push("Quantity must be greater than 0");
+      }
+      if (sanitizeNumber(lineItem.rate, 0) < 0) {
+        lineErrors.push("Rate cannot be negative");
+      }
+
+      setErrors((currentErrors) => {
+        const nextLineItemErrors = { ...currentErrors.lineItemsById };
+        if (lineErrors.length > 0) {
+          nextLineItemErrors[lineItemId] = lineErrors.join(". ");
+        } else {
+          delete nextLineItemErrors[lineItemId];
+        }
+        return { ...currentErrors, lineItemsById: nextLineItemErrors };
+      });
+    },
+    [draft.lineItems],
+  );
 
   const resetDraft = () => {
     if (!profile) {
@@ -487,8 +504,7 @@ export default function NewInvoicePage() {
         quantity,
         rate,
         amount,
-        actualMinutes: lineItem.source === "manual" ? roundedMinutes : lineItem.actualMinutes,
-        billedMinutes: lineItem.source === "manual" ? roundedMinutes : lineItem.billedMinutes,
+        minutes: lineItem.source === "manual" ? roundedMinutes : lineItem.minutes,
       };
     });
 
@@ -568,8 +584,7 @@ export default function NewInvoicePage() {
             description: lineItem.description,
             quantity: lineItem.quantity,
             rate: lineItem.rate,
-            actualMinutes: lineItem.actualMinutes,
-            billedMinutes: lineItem.billedMinutes,
+            minutes: lineItem.minutes,
           })),
           clientTotals: {
             subtotal: nextSubtotal,
@@ -677,7 +692,7 @@ export default function NewInvoicePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28 xl:pb-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="space-y-1">
           <Link
@@ -747,26 +762,6 @@ export default function NewInvoicePage() {
                 {errors.clientId && (
                   <p className="text-xs text-red-600 mt-1">{errors.clientId}</p>
                 )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Detail Level</label>
-                <select
-                  value={draft.detailLevel}
-                  onChange={(event) => {
-                    updateDraft((currentDraft) => ({
-                      ...currentDraft,
-                      detailLevel: event.target.value as InvoiceDetailLevel,
-                    }));
-                  }}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                >
-                  {getInvoiceDetailOptions().map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div>
@@ -914,47 +909,49 @@ export default function NewInvoicePage() {
                 No line items yet. Add a manual item or import tracked time entries below.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left">
-                      <th className="py-3 px-5 text-xs font-semibold uppercase tracking-wider text-slate-400">Description</th>
-                      <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Qty</th>
-                      <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Rate</th>
-                      <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Amount</th>
-                      <th className="py-3 px-5" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {draft.lineItems.map((lineItem) => (
-                      <tr key={lineItem.id} className="border-b border-slate-50 last:border-b-0 align-top">
-                        <td className="py-3 px-5">
-                          <input
-                            type="text"
-                            value={lineItem.description}
-                            onChange={(event) => {
-                              updateLineItem(lineItem.id, { description: event.target.value });
-                            }}
-                            className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
-                              errors.lineItemsById[lineItem.id] ? "border-red-300" : "border-slate-200"
-                            }`}
-                            placeholder="Describe the work or service"
-                          />
-                          <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-slate-500">
-                            <span className={`px-2 py-0.5 rounded-full ${lineItem.source === "time_entry" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                              {lineItem.source === "time_entry" ? "Tracked time" : "Manual"}
+              <>
+                <div className="divide-y divide-slate-100 md:hidden">
+                  {draft.lineItems.map((lineItem) => (
+                    <div key={lineItem.id} className="p-4 space-y-3">
+                      <input
+                        type="text"
+                        value={lineItem.description}
+                        onChange={(event) => {
+                          updateLineItem(lineItem.id, { description: event.target.value });
+                        }}
+                        onBlur={() => {
+                          validateLineItemOnBlur(lineItem.id);
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
+                          errors.lineItemsById[lineItem.id] ? "border-red-300" : "border-slate-200"
+                        }`}
+                        placeholder="Describe the work or service"
+                      />
+
+                      <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                        <span className={`px-2 py-0.5 rounded-full ${lineItem.source === "time_entry" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                          {lineItem.source === "time_entry" ? "Tracked time" : "Manual"}
+                        </span>
+                        {lineItem.source === "time_entry" && (() => {
+                          const sourceEntry = lineItem.timeEntryId
+                            ? timeEntries.find((entry) => entry.id === lineItem.timeEntryId)
+                            : null;
+                          const session = sourceEntry
+                            ? formatTimeRange(sourceEntry.startTime, sourceEntry.endTime)
+                            : "";
+
+                          return (
+                            <span className="text-slate-500">
+                              {getRuleLabel(lineItem.billingRule ?? "exact")} · Time {formatMinutes(lineItem.minutes)}
+                              {session ? ` · ${session}` : ""}
                             </span>
-                            {lineItem.source === "time_entry" && lineItem.billingRule && (
-                              <span className="text-slate-500">
-                                {getRuleLabel(lineItem.billingRule)} · Actual {formatMinutes(lineItem.actualMinutes)}
-                              </span>
-                            )}
-                          </div>
-                          {errors.lineItemsById[lineItem.id] && (
-                            <p className="text-xs text-red-600 mt-1">{errors.lineItemsById[lineItem.id]}</p>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
+                          );
+                        })()}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 block mb-1">Qty</label>
                           <input
                             type="number"
                             min={0}
@@ -966,11 +963,15 @@ export default function NewInvoicePage() {
                                 quantity: Number.isFinite(value) ? value : 0,
                               });
                             }}
+                            onBlur={() => {
+                              validateLineItemOnBlur(lineItem.id);
+                            }}
                             disabled={lineItem.source === "time_entry"}
-                            className="w-24 ml-auto block px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
                           />
-                        </td>
-                        <td className="py-3 px-4">
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 block mb-1">Rate</label>
                           <input
                             type="number"
                             min={0}
@@ -982,28 +983,146 @@ export default function NewInvoicePage() {
                                 rate: Number.isFinite(value) ? value : 0,
                               });
                             }}
+                            onBlur={() => {
+                              validateLineItemOnBlur(lineItem.id);
+                            }}
                             disabled={lineItem.source === "time_entry"}
-                            className="w-28 ml-auto block px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
                           />
-                        </td>
-                        <td className="py-3 px-4 text-right text-sm font-semibold text-slate-900 font-mono-nums">
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-slate-900 font-mono-nums">
                           {formatCurrency(lineItem.amount, profile?.defaultCurrency ?? "$")}
-                        </td>
-                        <td className="py-3 px-5 text-right">
-                          <button
-                            onClick={() => removeLineItem(lineItem.id)}
-                            disabled={isSavingInvoice}
-                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                            title="Remove line item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+                        </div>
+                        <button
+                          onClick={() => removeLineItem(lineItem.id)}
+                          disabled={isSavingInvoice}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Remove line item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {errors.lineItemsById[lineItem.id] && (
+                        <p className="text-xs text-red-600">{errors.lineItemsById[lineItem.id]}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full min-w-[760px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-left">
+                        <th className="py-3 px-5 text-xs font-semibold uppercase tracking-wider text-slate-400">Description</th>
+                        <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Qty</th>
+                        <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Rate</th>
+                        <th className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Amount</th>
+                        <th className="py-3 px-5" />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {draft.lineItems.map((lineItem) => (
+                        <tr key={lineItem.id} className="border-b border-slate-50 last:border-b-0 align-top">
+                          <td className="py-3 px-5">
+                            <input
+                              type="text"
+                              value={lineItem.description}
+                              onChange={(event) => {
+                                updateLineItem(lineItem.id, { description: event.target.value });
+                              }}
+                              onBlur={() => {
+                                validateLineItemOnBlur(lineItem.id);
+                              }}
+                              className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
+                                errors.lineItemsById[lineItem.id] ? "border-red-300" : "border-slate-200"
+                              }`}
+                              placeholder="Describe the work or service"
+                            />
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                              <span className={`px-2 py-0.5 rounded-full ${lineItem.source === "time_entry" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                {lineItem.source === "time_entry" ? "Tracked time" : "Manual"}
+                              </span>
+                              {lineItem.source === "time_entry" && (() => {
+                                const sourceEntry = lineItem.timeEntryId
+                                  ? timeEntries.find((entry) => entry.id === lineItem.timeEntryId)
+                                  : null;
+                                const session = sourceEntry
+                                  ? formatTimeRange(sourceEntry.startTime, sourceEntry.endTime)
+                                  : "";
+
+                                return (
+                                  <span className="text-slate-500">
+                                    {getRuleLabel(lineItem.billingRule ?? "exact")} · Time {formatMinutes(lineItem.minutes)}
+                                    {session ? ` · ${session}` : ""}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            {errors.lineItemsById[lineItem.id] && (
+                              <p className="text-xs text-red-600 mt-1">{errors.lineItemsById[lineItem.id]}</p>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={lineItem.quantity}
+                              onChange={(event) => {
+                                const value = Number(event.target.value);
+                                updateLineItem(lineItem.id, {
+                                  quantity: Number.isFinite(value) ? value : 0,
+                                });
+                              }}
+                              onBlur={() => {
+                                validateLineItemOnBlur(lineItem.id);
+                              }}
+                              disabled={lineItem.source === "time_entry"}
+                              className="w-24 ml-auto block px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
+                            />
+                          </td>
+                          <td className="py-3 px-4">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={lineItem.rate}
+                              onChange={(event) => {
+                                const value = Number(event.target.value);
+                                updateLineItem(lineItem.id, {
+                                  rate: Number.isFinite(value) ? value : 0,
+                                });
+                              }}
+                              onBlur={() => {
+                                validateLineItemOnBlur(lineItem.id);
+                              }}
+                              disabled={lineItem.source === "time_entry"}
+                              className="w-28 ml-auto block px-3 py-2 rounded-lg border border-slate-200 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-500"
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm font-semibold text-slate-900 font-mono-nums">
+                            {formatCurrency(lineItem.amount, profile?.defaultCurrency ?? "$")}
+                          </td>
+                          <td className="py-3 px-5 text-right">
+                            <button
+                              onClick={() => removeLineItem(lineItem.id)}
+                              disabled={isSavingInvoice}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Remove line item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
 
@@ -1025,19 +1144,19 @@ export default function NewInvoicePage() {
 
             {draft.clientId && uninvoicedEntriesForClient.length === 0 && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                No uninvoiced billable entries found for this client.
+                No uninvoiced entries found for this client.
               </div>
             )}
 
             {draft.clientId && uninvoicedEntriesForClient.length > 0 && (
               <div className="space-y-2">
                 {uninvoicedEntriesForClient.map((entry) => {
-                  const billedMinutes = calculateBilledMinutes(
+                  const minutes = calculateBilledMinutes(
                     entry.actualMinutes,
                     entry.billingRuleSnapshot.rule,
                     entry.billingRuleSnapshot.minimumMinutes
                   );
-                  const wouldAmount = calculateAmount(billedMinutes, entry.hourlyRate);
+                  const wouldAmount = calculateAmount(minutes, entry.hourlyRate);
                   const isAdded = addedTimeEntryIds.has(entry.id);
                   const projectName = projectById.get(entry.projectId)?.name;
 
@@ -1053,9 +1172,13 @@ export default function NewInvoicePage() {
                         <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
                           <span>{entry.entryDate}</span>
                           <span>•</span>
-                          <span>Actual {formatMinutes(entry.actualMinutes)}</span>
-                          <span>•</span>
-                          <span>Billed {formatMinutes(billedMinutes)}</span>
+                          <span>Time {formatMinutes(minutes)}</span>
+                          {formatTimeRange(entry.startTime, entry.endTime) && (
+                            <>
+                              <span>•</span>
+                              <span>{formatTimeRange(entry.startTime, entry.endTime)}</span>
+                            </>
+                          )}
                           <span>•</span>
                           <span>{getRuleLabel(entry.billingRuleSnapshot.rule)}</span>
                           <span>•</span>
@@ -1065,7 +1188,7 @@ export default function NewInvoicePage() {
                       <button
                         onClick={() => addTimeEntryLineItem(entry)}
                         disabled={isAdded || isSavingInvoice}
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-60 disabled:cursor-not-allowed border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-60 disabled:cursor-not-allowed border-emerald-200 text-emerald-700 hover:bg-emerald-50 w-full sm:w-auto"
                       >
                         <FileSpreadsheet className="w-4 h-4" />
                         {isSavingInvoice ? "Saving..." : isAdded ? "Added" : "Add to Invoice"}
@@ -1079,7 +1202,7 @@ export default function NewInvoicePage() {
         </div>
 
         <aside className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 sticky top-20">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 xl:sticky xl:top-20">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
               <Calculator className="w-4 h-4" />
               Invoice Summary
@@ -1159,6 +1282,34 @@ export default function NewInvoicePage() {
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* Sticky mobile action bar - visible only below xl breakpoint */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 p-4 xl:hidden">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-slate-400">Total</div>
+            <div className="text-lg font-bold text-emerald-600 font-mono-nums truncate">
+              {formatCurrency(total, profile?.defaultCurrency ?? "$")}
+            </div>
+          </div>
+          <button
+            onClick={() => void createInvoiceFromDraft({ previewAfterCreate: true, status: "sent" })}
+            disabled={isSavingInvoice}
+            className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <WandSparkles className="w-4 h-4" />
+            {isSavingInvoice ? "Saving..." : "Generate"}
+          </button>
+          <button
+            onClick={() => void createInvoiceFromDraft({ previewAfterCreate: false, status: "draft" })}
+            disabled={isSavingInvoice}
+            className="inline-flex items-center justify-center gap-2 bg-slate-900 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Save className="w-4 h-4" />
+            Draft
+          </button>
+        </div>
       </div>
     </div>
   );

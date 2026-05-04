@@ -143,31 +143,33 @@ export function PricingOrbit() {
           viewport={{ once: true }}
           className="mt-12 max-w-lg mx-auto"
         >
-          <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-            <div className="grid grid-cols-3 gap-4 px-4 py-3 border-b border-slate-50 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              <div>Feature</div>
-              <div className="text-center">Free</div>
-              <div className="text-center text-emerald-600">Pro</div>
-            </div>
-            {[
-              { feature: "Clients", free: "2", pro: "Unlimited" },
-              { feature: "Invoices/mo", free: "5", pro: "Unlimited" },
-              { feature: "Timer", free: "—", pro: "✓" },
-              { feature: "Tiny Tasks", free: "—", pro: "✓" },
-              { feature: "Detail Levels", free: "Simple", pro: "All 3" },
-              { feature: "Branding", free: "Basic", pro: "Custom" },
-            ].map((row, i) => (
-              <div
-                key={row.feature}
-                className={`grid grid-cols-3 gap-4 px-4 py-2.5 text-sm ${
-                  i % 2 === 0 ? "bg-slate-50/50" : ""
-                }`}
-              >
-                <div className="text-slate-600">{row.feature}</div>
-                <div className="text-center text-slate-400">{row.free}</div>
-                <div className="text-center font-medium text-emerald-600">{row.pro}</div>
+          <div className="bg-white rounded-xl border border-slate-100 overflow-x-auto">
+            <div className="min-w-[420px]">
+              <div className="grid grid-cols-3 gap-4 px-4 py-3 border-b border-slate-50 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div>Feature</div>
+                <div className="text-center">Free</div>
+                <div className="text-center text-emerald-600">Pro</div>
               </div>
-            ))}
+              {[
+                { feature: "Clients", free: "2", pro: "Unlimited" },
+                { feature: "Invoices/mo", free: "5", pro: "Unlimited" },
+                { feature: "Timer", free: "—", pro: "✓" },
+                { feature: "Tiny Tasks", free: "—", pro: "✓" },
+                { feature: "Detail Levels", free: "Simple", pro: "All 3" },
+                { feature: "Branding", free: "Basic", pro: "Custom" },
+              ].map((row, i) => (
+                <div
+                  key={row.feature}
+                  className={`grid grid-cols-3 gap-4 px-4 py-2.5 text-sm ${
+                    i % 2 === 0 ? "bg-slate-50/50" : ""
+                  }`}
+                >
+                  <div className="text-slate-600">{row.feature}</div>
+                  <div className="text-center text-slate-400">{row.free}</div>
+                  <div className="text-center font-medium text-emerald-600">{row.pro}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </motion.div>
       </div>

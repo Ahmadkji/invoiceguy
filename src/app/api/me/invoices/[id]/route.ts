@@ -1,18 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createRouteClient } from "@/lib/supabase/route";
 import { hasAllowedOrigin } from "@/lib/security/request";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import {
-  mapClientRow,
-  mapInvoiceItemRow,
+  loadInvoiceDetailData,
   mapInvoiceRow,
-  mapProfileRow,
-  mapProjectSummaryRow,
-  mapTimeEntryRow,
 } from "@/lib/invoices/server";
 
 const ALLOWED_STATUS_VALUES = new Set(["draft", "sent", "paid", "void"]);
-const MAX_PROJECT_OPTIONS = 500;
 
 const VALID_TRANSITIONS: Record<string, Set<string>> = {
   draft: new Set(["sent", "void"]),
@@ -37,90 +32,23 @@ export async function GET(
     return NextResponse.json({ ok: false, code: "UNAUTHORIZED", message: "Please sign in again." }, { status: 401 });
   }
 
-  const { data: invoiceData, error: invoiceError } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const detailResult = await loadInvoiceDetailData({
+    supabase,
+    user,
+    invoiceId: id,
+  });
 
-  if (invoiceError) {
-    console.error("[invoices:detail] failed to load invoice", {
-      code: invoiceError.code,
-      message: invoiceError.message,
-      details: invoiceError.details,
-      invoiceId: id,
-    });
-
+  if (!detailResult.ok) {
     return NextResponse.json(
-      { ok: false, code: "LOAD_FAILED", message: "Unable to load this invoice." },
-      { status: 500 },
+      { ok: false, code: detailResult.code, message: detailResult.message },
+      { status: detailResult.status },
     );
-  }
-
-  if (!invoiceData) {
-    return NextResponse.json(
-      { ok: false, code: "NOT_FOUND", message: "Invoice not found." },
-      { status: 404 },
-    );
-  }
-
-  const [itemsResult, clientResult, profileResult, projectsResult] = await Promise.all([
-    supabase.from("invoice_items").select("*").eq("invoice_id", id).order("sort_order", { ascending: true }),
-    supabase.from("clients").select("*").eq("id", invoiceData.client_id).eq("user_id", user.id).maybeSingle(),
-    supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("projects").select("id,name").eq("user_id", user.id).order("name", { ascending: true }).limit(MAX_PROJECT_OPTIONS),
-  ]);
-
-  const firstError = itemsResult.error ?? clientResult.error ?? profileResult.error ?? projectsResult.error;
-  if (firstError) {
-    console.error("[invoices:detail] related data load failed", {
-      code: firstError.code,
-      message: firstError.message,
-      details: firstError.details,
-      invoiceId: id,
-    });
-
-    return NextResponse.json(
-      { ok: false, code: "LOAD_FAILED", message: "Unable to load invoice details." },
-      { status: 500 },
-    );
-  }
-
-  const invoiceItems = (itemsResult.data ?? []).map((row) => mapInvoiceItemRow(row));
-  const linkedTimeEntryIds = invoiceItems
-    .map((item) => item.timeEntryId)
-    .filter((value): value is string => Boolean(value));
-
-  let timeEntries: ReturnType<typeof mapTimeEntryRow>[] = [];
-  if (linkedTimeEntryIds.length > 0) {
-    const { data: timeEntriesData, error: timeEntriesError } = await supabase
-      .from("time_entries")
-      .select("*")
-      .in("id", linkedTimeEntryIds)
-      .eq("user_id", user.id);
-
-    if (timeEntriesError) {
-      console.error("[invoices:detail] failed to load linked time entries", {
-        code: timeEntriesError.code,
-        message: timeEntriesError.message,
-        details: timeEntriesError.details,
-        invoiceId: id,
-      });
-    } else {
-      timeEntries = (timeEntriesData ?? []).map((row) => mapTimeEntryRow(row));
-    }
   }
 
   return withCookies(
     NextResponse.json({
       ok: true,
-      invoice: mapInvoiceRow(invoiceData),
-      invoiceItems,
-      timeEntries,
-      client: clientResult.data ? mapClientRow(clientResult.data) : null,
-      profile: mapProfileRow(profileResult.data, user),
-      projects: (projectsResult.data ?? []).map((row) => mapProjectSummaryRow(row)),
+      ...detailResult.value,
     }),
   );
 }
@@ -148,7 +76,7 @@ export async function PATCH(
     );
   }
 
-  const rl = checkRateLimit(`mutate:${user.id}:invoice-update`, 30, 60_000);
+  const rl = await checkRateLimitWithProvider(`mutate:${user.id}:invoice-update`, 30, 60_000, { supabase });
   if (!rl.allowed) {
     return NextResponse.json({ ok: false, code: "RATE_LIMITED", message: "Too many requests. Try again later." }, { status: 429 });
   }

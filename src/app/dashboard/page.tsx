@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const isDataLoading = useAppStore((s) => s.isDataLoading);
   const dataError = useAppStore((s) => s.dataError);
 
-  const uninvoicedEntries = timeEntries.filter((e) => e.status === "uninvoiced" && e.isBillable);
+  const uninvoicedEntries = timeEntries.filter((e) => e.invoiceId === null);
   const totalUninvoicedMinutes = uninvoicedEntries.reduce((sum, e) => sum + e.billedMinutes, 0);
   const totalUninvoicedAmount = uninvoicedEntries.reduce((sum, e) => sum + e.amount, 0);
 
@@ -104,7 +104,7 @@ export default function DashboardPage() {
         >
           <h3 className="text-lg font-bold mb-2">What are you working on?</h3>
           <p className="text-emerald-100 text-sm mb-4">Track your time and turn it into a clean invoice.</p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Link
               href="/dashboard/time"
               className="inline-flex items-center gap-2 bg-white text-emerald-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-50 transition-colors"
@@ -164,7 +164,7 @@ export default function DashboardPage() {
           {recentEntries.map((entry) => {
             const client = clients.find((c) => c.id === entry.clientId);
             return (
-              <div key={entry.id} className="px-4 sm:px-6 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+              <div key={entry.id} className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className="w-2 h-2 rounded-full flex-shrink-0"
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-                <div className="text-right flex-shrink-0 ml-3">
+                <div className="text-left sm:text-right flex-shrink-0 sm:ml-3 pl-5 sm:pl-0">
                   <div className="text-sm font-mono-nums font-medium text-slate-700">
                     {formatTimeRange(entry.startTime, entry.endTime) || formatMinutes(entry.actualMinutes)}
                   </div>
@@ -219,7 +219,7 @@ export default function DashboardPage() {
               void: "bg-red-50 text-red-600",
             };
             return (
-              <div key={invoice.id} className="px-4 sm:px-6 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+              <div key={invoice.id} className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="text-sm font-mono-nums font-medium text-slate-500 w-16 sm:w-20 flex-shrink-0">
                     {invoice.invoiceNumber}
@@ -229,7 +229,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-slate-400">{invoice.invoiceDate}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 ml-3">
+                <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 sm:ml-3 pl-5 sm:pl-0">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[invoice.status]}`}>
                     {invoice.status}
                   </span>

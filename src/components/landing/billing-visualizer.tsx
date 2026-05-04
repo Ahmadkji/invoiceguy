@@ -69,7 +69,7 @@ export function BillingRuleVisualizer() {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
@@ -85,8 +85,8 @@ export function BillingRuleVisualizer() {
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <div className="text-lg font-bold text-slate-900 font-mono-nums">
+                <div className="text-left sm:text-right pl-16 sm:pl-0">
+                  <div className="text-base sm:text-lg font-bold text-slate-900 font-mono-nums">
                     {session.start} – {session.end}
                   </div>
                   <div className="text-sm font-medium text-emerald-600">

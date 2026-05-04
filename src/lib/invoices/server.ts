@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import {
   BILLING_RULES,
   DbRecord,
@@ -26,6 +26,14 @@ import {
 } from "@/lib/types";
 
 export type InvoiceEditorProject = Pick<Project, "id" | "name">;
+export type InvoiceDetailData = {
+  invoice: Invoice;
+  invoiceItems: InvoiceItem[];
+  timeEntries: TimeEntry[];
+  client: Client | null;
+  profile: UserProfile;
+  projects: InvoiceEditorProject[];
+};
 
 type InvalidResult = {
   ok: false;
@@ -35,13 +43,26 @@ type InvalidResult = {
   fieldErrors?: Record<string, string>;
 };
 
+type InvoiceDetailLoadResult =
+  | {
+      ok: true;
+      value: InvoiceDetailData;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+    };
+
 export type ValidResult<T> = {
   ok: true;
   value: T;
 };
 
-const INVOICE_DETAIL_LEVELS: InvoiceDetailLevel[] = ["simple", "standard", "audit"];
+const INVOICE_DETAIL_LEVELS: string[] = ["simple", "standard", "audit", "detailed"];
 const INVOICE_STATUSES: InvoiceStatus[] = ["draft", "sent", "paid", "void"];
+const DEFAULT_MAX_PROJECT_OPTIONS = 500;
 
 // Invoice-specific helpers kept local
 
@@ -79,7 +100,7 @@ function isBillingRule(value: string): value is BillingRule {
 }
 
 function isInvoiceDetailLevel(value: string): value is InvoiceDetailLevel {
-  return INVOICE_DETAIL_LEVELS.includes(value as InvoiceDetailLevel);
+  return INVOICE_DETAIL_LEVELS.includes(value);
 }
 
 function isInvoiceStatus(value: string): value is InvoiceStatus {
@@ -128,7 +149,7 @@ function defaultProfileFromUser(user: User): UserProfile {
     defaultHourlyRate: 0,
     defaultBillingIncrement: "exact",
     defaultMinimumBillableMinutes: null,
-    defaultInvoiceDetailLevel: "standard",
+    defaultInvoiceDetailLevel: "detailed",
     defaultInvoiceNotes: null,
     invoiceNumberPrefix: "INV",
     nextInvoiceNumber: 1,
@@ -154,11 +175,11 @@ export function mapProfileRow(row: unknown, user: User): UserProfile {
 
   const defaultInvoiceDetailLevelValue = toStringValue(
     record.default_invoice_detail_level,
-    "standard",
+    "detailed",
   );
   const defaultInvoiceDetailLevel = isInvoiceDetailLevel(defaultInvoiceDetailLevelValue)
-    ? defaultInvoiceDetailLevelValue
-    : "standard";
+    ? "detailed"
+    : "detailed";
 
   return {
     id: toStringValue(record.id),
@@ -251,24 +272,20 @@ export function mapProjectRow(row: unknown): Project {
 
 export function mapTimeEntryRow(row: unknown): TimeEntry {
   const record = asRecord(row);
-  const statusValue = toStringValue(record.status, "uninvoiced");
-  const status: TimeEntry["status"] = ["uninvoiced", "invoiced", "non_billable"].includes(statusValue)
+  const invoiceId = toNullableString(record.invoice_id);
+  const statusValue = toStringValue(record.status, invoiceId ? "invoiced" : "uninvoiced");
+  const status: TimeEntry["status"] = ["uninvoiced", "invoiced"].includes(statusValue)
     ? (statusValue as TimeEntry["status"])
-    : "uninvoiced";
-
-  const nonBillableCategoryValue = toNullableString(record.non_billable_category);
-  const nonBillableCategory: TimeEntry["nonBillableCategory"] =
-    nonBillableCategoryValue &&
-    ["admin", "client_communication", "internal", "learning", "other"].includes(nonBillableCategoryValue)
-      ? (nonBillableCategoryValue as TimeEntry["nonBillableCategory"])
-      : null;
+    : invoiceId
+      ? "invoiced"
+      : "uninvoiced";
 
   return {
     id: toStringValue(record.id),
     userId: toStringValue(record.user_id),
     clientId: toStringValue(record.client_id),
     projectId: toStringValue(record.project_id),
-    invoiceId: toNullableString(record.invoice_id),
+    invoiceId,
     entryDate: toStringValue(record.entry_date),
     startTime: toNullableString(record.start_time),
     endTime: toNullableString(record.end_time),
@@ -278,8 +295,6 @@ export function mapTimeEntryRow(row: unknown): TimeEntry {
     amount: Math.max(0, toNumber(record.amount, 0)),
     taskNote: toStringValue(record.task_note),
     internalNote: toNullableString(record.internal_note),
-    isBillable: Boolean(record.is_billable),
-    nonBillableCategory,
     billingRuleSnapshot: mapBillingRuleSnapshot(record.billing_rule_snapshot),
     status,
     createdAt: toIsoString(record.created_at),
@@ -289,8 +304,8 @@ export function mapTimeEntryRow(row: unknown): TimeEntry {
 
 export function mapInvoiceRow(row: unknown): Invoice {
   const record = asRecord(row);
-  const detailLevelValue = toStringValue(record.detail_level, "standard");
-  const detailLevel = isInvoiceDetailLevel(detailLevelValue) ? detailLevelValue : "standard";
+  const detailLevelValue = toStringValue(record.detail_level, "detailed");
+  const detailLevel = isInvoiceDetailLevel(detailLevelValue) ? "detailed" : "detailed";
 
   const statusValue = toStringValue(record.status, "draft");
   const status = isInvoiceStatus(statusValue) ? statusValue : "draft";
@@ -337,6 +352,111 @@ export function mapInvoiceItemRow(row: unknown): InvoiceItem {
   };
 }
 
+export async function loadInvoiceDetailData({
+  supabase,
+  user,
+  invoiceId,
+  maxProjectOptions = DEFAULT_MAX_PROJECT_OPTIONS,
+}: {
+  supabase: SupabaseClient;
+  user: User;
+  invoiceId: string;
+  maxProjectOptions?: number;
+}): Promise<InvoiceDetailLoadResult> {
+  const { data: invoiceData, error: invoiceError } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (invoiceError) {
+    console.error("[invoices:detail-load] failed to load invoice", {
+      code: invoiceError.code,
+      message: invoiceError.message,
+      details: invoiceError.details,
+      invoiceId,
+    });
+
+    return {
+      ok: false,
+      status: 500,
+      code: "LOAD_FAILED",
+      message: "Unable to load this invoice.",
+    };
+  }
+
+  if (!invoiceData) {
+    return {
+      ok: false,
+      status: 404,
+      code: "NOT_FOUND",
+      message: "Invoice not found.",
+    };
+  }
+
+  const [itemsResult, clientResult, profileResult, projectsResult] = await Promise.all([
+    supabase.from("invoice_items").select("*").eq("invoice_id", invoiceId).order("sort_order", { ascending: true }),
+    supabase.from("clients").select("*").eq("id", invoiceData.client_id).eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("projects").select("id,name").eq("user_id", user.id).order("name", { ascending: true }).limit(maxProjectOptions),
+  ]);
+
+  const firstError = itemsResult.error ?? clientResult.error ?? profileResult.error ?? projectsResult.error;
+  if (firstError) {
+    console.error("[invoices:detail-load] related data load failed", {
+      code: firstError.code,
+      message: firstError.message,
+      details: firstError.details,
+      invoiceId,
+    });
+
+    return {
+      ok: false,
+      status: 500,
+      code: "LOAD_FAILED",
+      message: "Unable to load invoice details.",
+    };
+  }
+
+  const invoiceItems = (itemsResult.data ?? []).map((row) => mapInvoiceItemRow(row));
+  const linkedTimeEntryIds = invoiceItems
+    .map((item) => item.timeEntryId)
+    .filter((value): value is string => Boolean(value));
+
+  let timeEntries: ReturnType<typeof mapTimeEntryRow>[] = [];
+  if (linkedTimeEntryIds.length > 0) {
+    const { data: timeEntriesData, error: timeEntriesError } = await supabase
+      .from("time_entries")
+      .select("*")
+      .in("id", linkedTimeEntryIds)
+      .eq("user_id", user.id);
+
+    if (timeEntriesError) {
+      console.error("[invoices:detail-load] failed to load linked time entries", {
+        code: timeEntriesError.code,
+        message: timeEntriesError.message,
+        details: timeEntriesError.details,
+        invoiceId,
+      });
+    } else {
+      timeEntries = (timeEntriesData ?? []).map((row) => mapTimeEntryRow(row));
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      invoice: mapInvoiceRow(invoiceData),
+      invoiceItems,
+      timeEntries,
+      client: clientResult.data ? mapClientRow(clientResult.data) : null,
+      profile: mapProfileRow(profileResult.data, user),
+      projects: (projectsResult.data ?? []).map((row) => mapProjectSummaryRow(row)),
+    },
+  };
+}
+
 export type CreateInvoicePayload = {
   clientId?: unknown;
   invoiceDate?: unknown;
@@ -363,8 +483,7 @@ export type ValidatedCreateInvoiceLineItem = {
   description: string;
   quantity: number;
   hourlyRate: number;
-  actualMinutes: number;
-  billedMinutes: number;
+  minutes: number;
   amount: number;
 };
 
@@ -422,8 +541,8 @@ export function validateCreateInvoicePayload(payload: unknown): InvalidResult | 
     }
   }
 
-  const detailLevelRaw = toStringValue(body.detailLevel, "standard");
-  const detailLevel = isInvoiceDetailLevel(detailLevelRaw) ? detailLevelRaw : "standard";
+  const detailLevelRaw = toStringValue(body.detailLevel, "detailed");
+  const detailLevel = isInvoiceDetailLevel(detailLevelRaw) ? detailLevelRaw : "detailed";
 
   const statusRaw = toStringValue(body.status, "draft");
   if (!isInvoiceStatus(statusRaw)) {
@@ -521,19 +640,22 @@ export function validateCreateInvoicePayload(payload: unknown): InvalidResult | 
       const amountCents = calculateLineAmountCents(normalizedQuantity, normalizedRate);
       const amount = fromCurrencyCents(amountCents);
 
-      const manualActualMinutes = toInteger(itemRecord.actualMinutes, Math.max(0, Math.round(normalizedQuantity * 60)));
-      const manualBilledMinutes = toInteger(itemRecord.billedMinutes, Math.max(0, Math.round(normalizedQuantity * 60)));
-
-      const actualMinutes = Math.max(0, manualActualMinutes);
-      const billedMinutes = Math.max(0, manualBilledMinutes);
+      const defaultMinutes = Math.max(0, Math.round(normalizedQuantity * 60));
+      const manualMinutes = toInteger(
+        itemRecord.minutes,
+        toInteger(
+          itemRecord.billedMinutes,
+          toInteger(itemRecord.actualMinutes, defaultMinutes),
+        ),
+      );
+      const minutes = Math.max(0, manualMinutes);
 
       normalizedItems.push({
         timeEntryId: timeEntryRaw,
         description,
         quantity: normalizedQuantity,
         hourlyRate: normalizedRate,
-        actualMinutes,
-        billedMinutes,
+        minutes,
         amount,
       });
 
@@ -608,8 +730,8 @@ export function toRpcLineItems(lineItems: ValidatedCreateInvoiceLineItem[]) {
   return lineItems.map((lineItem, index) => ({
     description: lineItem.description,
     timeEntryId: lineItem.timeEntryId,
-    actualMinutes: lineItem.actualMinutes,
-    billedMinutes: lineItem.billedMinutes,
+    actualMinutes: lineItem.minutes,
+    billedMinutes: lineItem.minutes,
     hourlyRate: lineItem.hourlyRate,
     amount: lineItem.amount,
     sortOrder: index + 1,

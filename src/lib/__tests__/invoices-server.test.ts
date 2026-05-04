@@ -6,7 +6,6 @@ import {
   mapTimeEntryRow,
   mapInvoiceRow,
   mapInvoiceItemRow,
-  mapProfileRow,
   toRpcLineItems,
   type ValidatedCreateInvoiceLineItem,
 } from "@/lib/invoices/server";
@@ -17,7 +16,7 @@ describe("validateCreateInvoicePayload", () => {
   const validPayload = {
     clientId: "550e8400-e29b-41d4-a716-446655440000",
     invoiceDate: "2024-06-15",
-    detailLevel: "standard",
+    detailLevel: "detailed",
     status: "draft",
     lineItems: [
       {
@@ -34,10 +33,21 @@ describe("validateCreateInvoicePayload", () => {
     if (result.ok) {
       expect(result.value.clientId).toBe("550e8400-e29b-41d4-a716-446655440000");
       expect(result.value.invoiceDate).toBe("2024-06-15");
-      expect(result.value.detailLevel).toBe("standard");
+            expect(result.value.detailLevel).toBe("detailed");
       expect(result.value.status).toBe("draft");
       expect(result.value.lineItems).toHaveLength(1);
       expect(result.value.lineItems[0].amount).toBe(500.0);
+    }
+  });
+
+  it("accepts canonical minutes on line items", () => {
+    const result = validateCreateInvoicePayload({
+      ...validPayload,
+      lineItems: [{ description: "Work", quantity: 1, rate: 120, minutes: 60 }],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.lineItems[0].minutes).toBe(60);
     }
   });
 
@@ -95,11 +105,11 @@ describe("validateCreateInvoicePayload", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("defaults detailLevel to standard when invalid", () => {
+  it("defaults detailLevel to detailed when invalid", () => {
     const result = validateCreateInvoicePayload({ ...validPayload, detailLevel: "ultra" });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.detailLevel).toBe("standard");
+      expect(result.value.detailLevel).toBe("detailed");
     }
   });
 
@@ -195,13 +205,13 @@ describe("validateCreateInvoicePayload", () => {
     }
   });
 
-  it("accepts all valid detail levels", () => {
-    const levels = ["simple", "standard", "audit"];
+  it("accepts all valid detail levels and normalizes to detailed", () => {
+    const levels = ["simple", "standard", "audit", "detailed"];
     for (const level of levels) {
       const result = validateCreateInvoicePayload({ ...validPayload, detailLevel: level });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.detailLevel).toBe(level);
+        expect(result.value.detailLevel).toBe("detailed");
       }
     }
   });
@@ -442,7 +452,7 @@ describe("mapProjectRow", () => {
 // ─── mapTimeEntryRow ─────────────────────────────────────────────────────────
 
 describe("mapTimeEntryRow", () => {
-  it("maps a complete billable time entry", () => {
+  it("maps a complete time entry", () => {
     const row = {
       id: "te-1",
       user_id: "user-1",
@@ -458,8 +468,6 @@ describe("mapTimeEntryRow", () => {
       amount: 150,
       task_note: "Built login page",
       internal_note: null,
-      is_billable: true,
-      non_billable_category: null,
       billing_rule_snapshot: { rule: "exact", increment_minutes: null, minimum_minutes: null },
       status: "invoiced",
       created_at: "2024-06-15T00:00:00.000Z",
@@ -471,7 +479,6 @@ describe("mapTimeEntryRow", () => {
     expect(entry.billedMinutes).toBe(90);
     expect(entry.hourlyRate).toBe(100);
     expect(entry.amount).toBe(150);
-    expect(entry.isBillable).toBe(true);
     expect(entry.status).toBe("invoiced");
     expect(entry.billingRuleSnapshot.rule).toBe("exact");
   });
@@ -488,7 +495,6 @@ describe("mapTimeEntryRow", () => {
       hourly_rate: 100,
       amount: 50,
       task_note: "Test",
-      is_billable: true,
       billing_rule_snapshot: { rule: "exact" },
       status: "unknown",
     };
@@ -508,7 +514,6 @@ describe("mapTimeEntryRow", () => {
       hourly_rate: -50,
       amount: -20,
       task_note: "Test",
-      is_billable: true,
       billing_rule_snapshot: { rule: "exact" },
       status: "uninvoiced",
     };
@@ -531,7 +536,7 @@ describe("mapInvoiceRow", () => {
       invoice_number: "INV-001",
       invoice_date: "2024-06-15",
       due_date: "2024-07-15",
-      detail_level: "standard",
+      detail_level: "detailed",
       subtotal: 1000,
       tax_amount: 100,
       discount_amount: 0,
@@ -554,7 +559,7 @@ describe("mapInvoiceRow", () => {
     expect(invoice.taxAmount).toBe(100);
     expect(invoice.totalAmount).toBe(1100);
     expect(invoice.status).toBe("sent");
-    expect(invoice.detailLevel).toBe("standard");
+    expect(invoice.detailLevel).toBe("detailed");
   });
 
   it("defaults status to draft for invalid values", () => {
@@ -651,8 +656,7 @@ describe("toRpcLineItems", () => {
         description: "Dev work",
         quantity: 5,
         hourlyRate: 100,
-        actualMinutes: 300,
-        billedMinutes: 300,
+        minutes: 300,
         amount: 500,
       },
       {
@@ -660,8 +664,7 @@ describe("toRpcLineItems", () => {
         description: "Design",
         quantity: 2,
         hourlyRate: 80,
-        actualMinutes: 120,
-        billedMinutes: 120,
+        minutes: 120,
         amount: 160,
       },
     ];
@@ -671,6 +674,8 @@ describe("toRpcLineItems", () => {
     expect(rpcItems[1].sortOrder).toBe(2);
     expect(rpcItems[0].description).toBe("Dev work");
     expect(rpcItems[0].timeEntryId).toBe("te-1");
+    expect(rpcItems[0].actualMinutes).toBe(300);
+    expect(rpcItems[0].billedMinutes).toBe(300);
     expect(rpcItems[1].timeEntryId).toBeNull();
   });
 });

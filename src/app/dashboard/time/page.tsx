@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Timer, Plus, Zap, CheckCircle, ToggleLeft, ToggleRight, Tag } from "lucide-react";
+import { Timer, Plus, Zap, CheckCircle } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
-import { formatMinutes, formatCurrency, formatTimeRange, calculateBilledMinutes, calculateAmount, getBillingRuleConfig } from "@/lib/billing-rules";
-import { BillableSplitCard } from "@/components/time/billable-split-card";
-import { NonBillableCategory, NON_BILLABLE_LABELS, TimeEntry } from "@/lib/types";
+import {
+  formatMinutes,
+  formatCurrency,
+  formatTimeRange,
+  calculateBilledMinutes,
+  calculateAmount,
+  getBillingRuleConfig,
+} from "@/lib/billing-rules";
+import { TimeEntry } from "@/lib/types";
 
 type CreateTimeEntryResponse = {
   ok?: boolean;
@@ -29,13 +35,10 @@ export default function TimeTrackingPage() {
   const addTimeEntry = useAppStore((s) => s.addTimeEntry);
 
   const [activeTab, setActiveTab] = useState<"timer" | "manual" | "tiny">("timer");
-  const [isBillable, setIsBillable] = useState(true);
-  const [nonBillableCategory, setNonBillableCategory] = useState<NonBillableCategory>("admin");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const savingRef = useRef(false);
 
-  // Manual entry form state
   const [manualClientId, setManualClientId] = useState("");
   const [manualProjectId, setManualProjectId] = useState("");
   const [manualTaskNote, setManualTaskNote] = useState("");
@@ -44,13 +47,11 @@ export default function TimeTrackingPage() {
   const [manualEndTime, setManualEndTime] = useState("");
   const [manualDuration, setManualDuration] = useState(0);
 
-  // Tiny task form state
   const [tinyClientId, setTinyClientId] = useState("");
   const [tinyProjectId, setTinyProjectId] = useState("");
   const [tinyTaskNote, setTinyTaskNote] = useState("");
   const [tinyDuration, setTinyDuration] = useState<number>(5);
 
-  // Timer interval managed in useEffect
   useEffect(() => {
     if (!timer.isRunning) return;
     const interval = setInterval(() => {
@@ -80,6 +81,19 @@ export default function TimeTrackingPage() {
     return result.timeEntry;
   };
 
+  /**
+   * Convert a "HH:MM" time value (from <input type="time">) to an ISO 8601
+   * timestamp using the browser's local timezone combined with the entry date.
+   * This ensures the server stores the correct absolute time regardless of
+   * the server's own timezone setting.
+   */
+  const localTimeToIso = (date: string, hhmm: string): string => {
+    const [h, m] = hhmm.split(":").map(Number);
+    const d = new Date(date + "T00:00:00");
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+
   const handleManualSubmit = async () => {
     if (!manualClientId || !manualProjectId || !manualTaskNote.trim() || !manualDate) {
       setSaveError("Client, project, task note, and date are required.");
@@ -103,8 +117,8 @@ export default function TimeTrackingPage() {
       return;
     }
 
-    const billedMinutes = isBillable ? calculateBilledMinutes(actualMinutes, rule, minimumMinutes) : 0;
-    const amount = isBillable ? calculateAmount(billedMinutes, hourlyRate) : 0;
+    const billedMinutes = calculateBilledMinutes(actualMinutes, rule, minimumMinutes);
+    const amount = calculateAmount(billedMinutes, hourlyRate);
 
     setSaveError(null);
     if (savingRef.current) return;
@@ -115,18 +129,16 @@ export default function TimeTrackingPage() {
         clientId: manualClientId,
         projectId: manualProjectId,
         entryDate: manualDate,
-        startTime: manualStartTime || null,
-        endTime: manualEndTime || null,
+        startTime: manualStartTime ? localTimeToIso(manualDate, manualStartTime) : null,
+        endTime: manualEndTime ? localTimeToIso(manualDate, manualEndTime) : null,
         actualMinutes,
-        billedMinutes: isBillable ? billedMinutes : 0,
-        hourlyRate: isBillable ? hourlyRate : 0,
+        billedMinutes,
+        hourlyRate,
         amount,
         taskNote: manualTaskNote.trim(),
         internalNote: null,
-        isBillable,
-        nonBillableCategory: isBillable ? null : nonBillableCategory,
         billingRuleSnapshot: getBillingRuleConfig(rule),
-        status: isBillable ? "uninvoiced" : "non_billable",
+        status: "uninvoiced",
       });
       addTimeEntry(entry);
       setManualClientId("");
@@ -158,8 +170,8 @@ export default function TimeTrackingPage() {
     const rule = project?.billingIncrement ?? profile?.defaultBillingIncrement ?? "exact";
     const minimumMinutes = project?.minimumBillableMinutes ?? profile?.defaultMinimumBillableMinutes ?? null;
     const actualMinutes = tinyDuration;
-    const billedMinutes = isBillable ? calculateBilledMinutes(actualMinutes, rule, minimumMinutes) : 0;
-    const amount = isBillable ? calculateAmount(billedMinutes, hourlyRate) : 0;
+    const billedMinutes = calculateBilledMinutes(actualMinutes, rule, minimumMinutes);
+    const amount = calculateAmount(billedMinutes, hourlyRate);
     const now = new Date().toISOString();
 
     setSaveError(null);
@@ -174,15 +186,13 @@ export default function TimeTrackingPage() {
         startTime: null,
         endTime: null,
         actualMinutes,
-        billedMinutes: isBillable ? billedMinutes : 0,
-        hourlyRate: isBillable ? hourlyRate : 0,
+        billedMinutes,
+        hourlyRate,
         amount,
         taskNote: tinyTaskNote.trim(),
         internalNote: null,
-        isBillable,
-        nonBillableCategory: isBillable ? null : nonBillableCategory,
         billingRuleSnapshot: getBillingRuleConfig(rule),
-        status: isBillable ? "uninvoiced" : "non_billable",
+        status: "uninvoiced",
       });
       addTimeEntry(entry);
       setTinyTaskNote("");
@@ -216,7 +226,7 @@ export default function TimeTrackingPage() {
     const rule = project?.billingIncrement ?? profile?.defaultBillingIncrement ?? "exact";
     const minimumMinutes = project?.minimumBillableMinutes ?? profile?.defaultMinimumBillableMinutes ?? null;
     const billedMinutes = calculateBilledMinutes(actualMinutes, rule, minimumMinutes);
-    const amount = isBillable ? calculateAmount(billedMinutes, hourlyRate) : 0;
+    const amount = calculateAmount(billedMinutes, hourlyRate);
     const startTime = timer.startTime;
     const endTime = new Date(new Date(startTime).getTime() + timer.elapsedSeconds * 1000).toISOString();
     const now = new Date().toISOString();
@@ -237,15 +247,13 @@ export default function TimeTrackingPage() {
           startTime,
           endTime,
           actualMinutes,
-          billedMinutes: isBillable ? billedMinutes : 0,
-          hourlyRate: isBillable ? hourlyRate : 0,
+          billedMinutes,
+          hourlyRate,
           amount,
           taskNote: timer.taskNote || "Timer session",
           internalNote: null,
-          isBillable,
-          nonBillableCategory: isBillable ? null : nonBillableCategory,
           billingRuleSnapshot: getBillingRuleConfig(rule),
-          status: isBillable ? "uninvoiced" : "non_billable",
+          status: "uninvoiced",
         }),
       });
 
@@ -271,17 +279,26 @@ export default function TimeTrackingPage() {
   const timerSecs = timer.elapsedSeconds % 60;
 
   const recentEntries = timeEntries.slice(0, 10);
-
-  // Show all entries because users often log and review across multiple days.
-  const splitEntries = useMemo(() => timeEntries, [timeEntries]);
+  const tinyProject = projects.find((p) => p.id === tinyProjectId);
+  const tinyPreviewAmount = tinyProject
+    ? formatCurrency(
+        calculateAmount(
+          calculateBilledMinutes(
+            tinyDuration,
+            tinyProject.billingIncrement ?? profile?.defaultBillingIncrement ?? "exact",
+            tinyProject.minimumBillableMinutes ?? profile?.defaultMinimumBillableMinutes ?? null,
+          ),
+          tinyProject.hourlyRate ?? profile?.defaultHourlyRate ?? 0,
+        ),
+      )
+    : null;
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Time Tracking</h1>
-          <p className="text-slate-500">Track billable and non-billable hours</p>
+          <p className="text-slate-500">Track hours and add entries to invoices later</p>
         </div>
       </div>
 
@@ -303,11 +320,7 @@ export default function TimeTrackingPage() {
         </div>
       )}
 
-      {/* Billable vs Non-Billable Split */}
-      <BillableSplitCard entries={splitEntries} />
-
-      {/* Tab switcher */}
-      <div className="bg-white rounded-xl border border-slate-100 p-1 flex gap-1 w-fit">
+      <div className="bg-white rounded-xl border border-slate-100 p-1 flex flex-wrap gap-1 w-full sm:w-fit">
         {[
           { key: "timer" as const, label: "Timer", icon: Timer },
           { key: "manual" as const, label: "Manual Entry", icon: Plus },
@@ -318,7 +331,7 @@ export default function TimeTrackingPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.key
                   ? "bg-emerald-600 text-white shadow-md"
                   : "text-slate-500 hover:bg-slate-50"
@@ -331,7 +344,6 @@ export default function TimeTrackingPage() {
         })}
       </div>
 
-      {/* Timer panel */}
       {activeTab === "timer" && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -339,7 +351,6 @@ export default function TimeTrackingPage() {
           className="bg-white rounded-xl border border-slate-100 p-8"
         >
           <div className="flex flex-col items-center">
-            {/* Timer metadata */}
             <div className="w-full max-w-md mb-6 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <select
@@ -372,7 +383,6 @@ export default function TimeTrackingPage() {
               />
             </div>
 
-            {/* Circular timer display */}
             <div className="relative w-48 h-48 sm:w-64 sm:h-64 mb-8">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                 <circle
@@ -391,7 +401,7 @@ export default function TimeTrackingPage() {
                   stroke="#10B981"
                   strokeWidth="4"
                   strokeLinecap="round"
-                  strokeDasharray={`${(timer.elapsedSeconds % 3600) / 3600 * 283} 283`}
+                  strokeDasharray={`${((timer.elapsedSeconds % 3600) / 3600) * 283} 283`}
                   transition={{ duration: 0.5 }}
                 />
               </svg>
@@ -406,13 +416,12 @@ export default function TimeTrackingPage() {
               </div>
             </div>
 
-            {/* Controls */}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               {!timer.isRunning ? (
                 <button
                   onClick={() => void handleStartTimer()}
                   disabled={isSaving}
-                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg"
+                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 sm:px-8 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg"
                 >
                   <Timer className="w-5 h-5" />
                   {timer.elapsedSeconds > 0 ? "Resume" : "Start Timer"}
@@ -421,14 +430,14 @@ export default function TimeTrackingPage() {
                 <>
                   <button
                     onClick={() => updateTimer({ isRunning: false })}
-                    className="inline-flex items-center gap-2 bg-amber-50 text-amber-600 px-6 py-3 rounded-xl font-semibold hover:bg-amber-100 transition-colors"
+                    className="inline-flex items-center justify-center gap-2 bg-amber-50 text-amber-600 px-6 py-3 rounded-xl font-semibold hover:bg-amber-100 transition-colors"
                   >
                     Pause
                   </button>
                   <button
                     onClick={() => void handleStopAndSave()}
                     disabled={isSaving}
-                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+                    className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
                   >
                     <CheckCircle className="w-5 h-5" />
                     {isSaving ? "Saving..." : "Stop & Save"}
@@ -440,7 +449,6 @@ export default function TimeTrackingPage() {
         </motion.div>
       )}
 
-      {/* Manual entry panel */}
       {activeTab === "manual" && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -480,8 +488,8 @@ export default function TimeTrackingPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="col-span-2 sm:col-span-1">
                 <label className="text-sm font-medium text-slate-700 mb-1.5 block">Date</label>
                 <input
                   type="date"
@@ -510,66 +518,6 @@ export default function TimeTrackingPage() {
               </div>
             </div>
 
-            {/* Billable toggle */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setIsBillable(!isBillable)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-colors ${
-                  isBillable
-                    ? "border-emerald-200 bg-emerald-50"
-                    : "border-slate-200 bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {isBillable ? (
-                    <ToggleRight className="w-5 h-5 text-emerald-600" />
-                  ) : (
-                    <ToggleLeft className="w-5 h-5 text-slate-400" />
-                  )}
-                  <span className={`text-sm font-medium ${isBillable ? "text-emerald-700" : "text-slate-600"}`}>
-                    Billable
-                  </span>
-                </div>
-                <span className={`text-xs ${isBillable ? "text-emerald-500" : "text-slate-400"}`}>
-                  {isBillable ? "Will be invoiced" : "Internal / non-billable"}
-                </span>
-              </button>
-
-              {!isBillable && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5" />
-                      Category
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {(Object.entries(NON_BILLABLE_LABELS) as [NonBillableCategory, string][]).map(
-                        ([key, label]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setNonBillableCategory(key)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                              nonBillableCategory === key
-                                ? "bg-slate-700 text-white"
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-
             <button onClick={() => void handleManualSubmit()} disabled={isSaving} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
               <Plus className="w-5 h-5" />
               {isSaving && activeTab === "manual" ? "Saving..." : "Save Time Entry"}
@@ -578,7 +526,6 @@ export default function TimeTrackingPage() {
         </motion.div>
       )}
 
-      {/* Tiny task panel */}
       {activeTab === "tiny" && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -631,7 +578,7 @@ export default function TimeTrackingPage() {
                     key={mins}
                     type="button"
                     onClick={() => setTinyDuration(mins)}
-                    className={`flex-1 min-w-[60px] py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                    className={`flex-1 min-w-[calc(33%-0.5rem)] py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
                       tinyDuration === mins
                         ? "border-emerald-400 bg-emerald-50 text-emerald-700"
                         : "border-slate-100 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
@@ -657,71 +604,9 @@ export default function TimeTrackingPage() {
             <div className="bg-slate-50 rounded-lg p-4 text-center">
               <div className="text-sm text-slate-500 mb-1">Preview</div>
               <div className="text-lg font-semibold text-slate-900">
-                {tinyDuration}m{isBillable && tinyProjectId ? ` = ${formatCurrency(calculateAmount(calculateBilledMinutes(tinyDuration, projects.find((p) => p.id === tinyProjectId)?.billingIncrement ?? profile?.defaultBillingIncrement ?? "exact", projects.find((p) => p.id === tinyProjectId)?.minimumBillableMinutes ?? profile?.defaultMinimumBillableMinutes ?? null), projects.find((p) => p.id === tinyProjectId)?.hourlyRate ?? profile?.defaultHourlyRate ?? 0))}` : ""}
+                {tinyDuration}m{tinyPreviewAmount ? ` = ${tinyPreviewAmount}` : ""}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                {isBillable ? "Billable" : "Non-billable"} entry
-              </div>
-            </div>
-
-            {/* Billable toggle for tiny tasks */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setIsBillable(!isBillable)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-colors ${
-                  isBillable
-                    ? "border-emerald-200 bg-emerald-50"
-                    : "border-slate-200 bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {isBillable ? (
-                    <ToggleRight className="w-5 h-5 text-emerald-600" />
-                  ) : (
-                    <ToggleLeft className="w-5 h-5 text-slate-400" />
-                  )}
-                  <span className={`text-sm font-medium ${isBillable ? "text-emerald-700" : "text-slate-600"}`}>
-                    Billable
-                  </span>
-                </div>
-                <span className={`text-xs ${isBillable ? "text-emerald-500" : "text-slate-400"}`}>
-                  {isBillable ? "Will be invoiced" : "Internal / non-billable"}
-                </span>
-              </button>
-
-              {!isBillable && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5" />
-                      Category
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {(Object.entries(NON_BILLABLE_LABELS) as [NonBillableCategory, string][]).map(
-                        ([key, label]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setNonBillableCategory(key)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                              nonBillableCategory === key
-                                ? "bg-slate-700 text-white"
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+              <div className="text-xs text-slate-500 mt-1">Ready to include in an invoice later</div>
             </div>
 
             <button onClick={() => void handleTinySubmit()} disabled={isSaving} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
@@ -732,7 +617,6 @@ export default function TimeTrackingPage() {
         </motion.div>
       )}
 
-      {/* Recent entries list */}
       <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-slate-50">
           <h3 className="font-bold text-slate-900">Recent Entries</h3>
@@ -741,73 +625,54 @@ export default function TimeTrackingPage() {
           {recentEntries.map((entry) => {
             const client = clients.find((c) => c.id === entry.clientId);
             const project = projects.find((p) => p.id === entry.projectId);
+            const isInvoiced = entry.invoiceId !== null || entry.status === "invoiced";
             return (
               <div
                 key={entry.id}
-                className={`px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between transition-colors gap-2 ${
-                  !entry.isBillable ? "bg-slate-50/50" : "hover:bg-slate-50"
-                }`}
+                className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between transition-colors gap-2 hover:bg-slate-50"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      !entry.isBillable ? "bg-slate-400" : ""
-                    }`}
-                    style={entry.isBillable ? { backgroundColor: client?.color || "#94A3B8" } : undefined}
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: client?.color || "#94A3B8" }}
                   />
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium truncate ${!entry.isBillable ? "text-slate-500" : "text-slate-900"}`}>
-                        {entry.taskNote}
-                      </span>
-                      {!entry.isBillable && (
-                        <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">
-                          {entry.nonBillableCategory ? NON_BILLABLE_LABELS[entry.nonBillableCategory] : "Non-billable"}
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-sm font-medium truncate text-slate-900">{entry.taskNote}</span>
                     <div className="text-xs text-slate-400 truncate">
                       {client?.name} • {project?.name} • {entry.entryDate}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 sm:gap-6 pl-5 sm:pl-0">
-                  {entry.isBillable ? (
-                    <>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-400">Work Session</div>
-                        <div className="text-sm font-mono-nums text-slate-600">
-                          {formatTimeRange(entry.startTime, entry.endTime) || "—"}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-400">Total Time</div>
-                        <div className="text-sm font-mono-nums font-semibold text-emerald-600">{formatMinutes(entry.actualMinutes)}</div>
-                      </div>
-                      <div className="text-right w-16 sm:w-20">
-                        <div className="text-xs text-slate-400">Amount</div>
-                        <div className="text-sm font-mono-nums font-semibold text-slate-900">{formatCurrency(entry.amount)}</div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-400">Work Session</div>
-                        <div className="text-sm font-mono-nums text-slate-500">
-                          {formatTimeRange(entry.startTime, entry.endTime) || "—"}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-400">Total Time</div>
-                        <div className="text-sm font-mono-nums text-slate-500">{formatMinutes(entry.actualMinutes)}</div>
-                      </div>
-                      <div className="text-right w-20">
-                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                          Non-billable
-                        </span>
-                      </div>
-                    </>
-                  )}
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-3 sm:gap-6 pl-5 sm:pl-0">
+                  <div className="text-right sm:text-right">
+                    <div className="text-xs text-slate-400">Work Session</div>
+                    <div className="text-sm font-mono-nums text-slate-600">
+                      {formatTimeRange(entry.startTime, entry.endTime) || "\u2014"}
+                    </div>
+                  </div>
+                  <div className="text-right sm:text-right">
+                    <div className="text-xs text-slate-400">Total Time</div>
+                    <div className="text-sm font-mono-nums font-semibold text-emerald-600">
+                      {formatMinutes(entry.actualMinutes)}
+                    </div>
+                  </div>
+                  <div className="text-right sm:w-20">
+                    <div className="text-xs text-slate-400">Amount</div>
+                    <div className="text-sm font-mono-nums font-semibold text-slate-900">
+                      {formatCurrency(entry.amount)}
+                    </div>
+                  </div>
+                  <div className="text-right sm:w-24">
+                    <span
+                      className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                        isInvoiced
+                          ? "bg-slate-100 text-slate-500"
+                          : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {isInvoiced ? "Invoiced" : "Uninvoiced"}
+                    </span>
+                  </div>
                 </div>
               </div>
             );

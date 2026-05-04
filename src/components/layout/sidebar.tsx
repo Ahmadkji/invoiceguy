@@ -46,6 +46,18 @@ export function CommandDock() {
     if (isMobile) setSidebarOpen(false);
   }, [pathname, isMobile, setSidebarOpen]);
 
+  // Sync data-sidebar-open attribute on <body> for CSS scroll lock
+  useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      document.body.setAttribute("data-sidebar-open", "true");
+    } else {
+      document.body.removeAttribute("data-sidebar-open");
+    }
+    return () => {
+      document.body.removeAttribute("data-sidebar-open");
+    };
+  }, [isMobile, sidebarOpen]);
+
   const handleNavClick = useCallback(() => {
     if (isMobile) setSidebarOpen(false);
   }, [isMobile, setSidebarOpen]);
@@ -107,7 +119,9 @@ export function CommandDock() {
         <nav className="flex-1 py-4 px-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+            const isActive = pathname === item.href
+              ? true
+              : item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`);
 
             return (
               <Link

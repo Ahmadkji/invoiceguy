@@ -34,7 +34,7 @@ export default function ClientsPage() {
     }
 
     for (const entry of timeEntries) {
-      if (entry.status !== "uninvoiced" || !entry.isBillable) {
+      if (entry.invoiceId !== null) {
         continue;
       }
 
@@ -128,14 +128,14 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
           <p className="text-slate-500">Manage your client relationships</p>
         </div>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg active:scale-[0.98]"
+          className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all hover:shadow-lg active:scale-[0.98] self-start"
         >
           <Plus className="w-4 h-4" />
           Add Client

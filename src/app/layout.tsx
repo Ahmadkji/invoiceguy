@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildOrganizationJsonLd, buildRootMetadata, buildWebsiteJsonLd } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -12,11 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 });
 
-export const metadata: Metadata = {
-  title: "TimeProof Invoice — Time-Based Invoicing for Freelancers",
-  description:
-    "Stop turning messy time logs into awkward invoices. Track work, apply billing rules, and send clean hourly invoices clients can actually understand.",
-};
+export const metadata: Metadata = buildRootMetadata();
 
 export default function RootLayout({
   children,
@@ -26,6 +24,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}>
+        <JsonLd data={buildOrganizationJsonLd()} />
+        <JsonLd data={buildWebsiteJsonLd()} />
         {children}
       </body>
     </html>

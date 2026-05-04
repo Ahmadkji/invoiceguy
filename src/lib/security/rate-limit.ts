@@ -4,6 +4,21 @@ type Bucket = {
 };
 
 type RateLimitStore = Map<string, Bucket>;
+type RpcRateLimitRow = {
+  allowed: boolean;
+  remaining: number;
+  retry_after_seconds: number;
+};
+
+type SupabaseRpcClient = {
+  rpc: (fn: string, args?: Record<string, unknown>) => unknown;
+};
+
+export type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+};
 
 declare global {
   var __invoiceguyRateLimitStore__: RateLimitStore | undefined;
@@ -28,7 +43,7 @@ function getStore(): RateLimitStore {
   return globalThis.__invoiceguyRateLimitStore__;
 }
 
-export function checkRateLimit(key: string, limit: number, windowMs: number) {
+export function checkRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   const store = getStore();
   const bucket = store.get(key);
@@ -59,4 +74,76 @@ export function checkRateLimit(key: string, limit: number, windowMs: number) {
     remaining: Math.max(0, limit - bucket.count),
     retryAfterSeconds: 0,
   };
+}
+
+function toRateLimitResult(raw: unknown): RateLimitResult | null {
+  const row = Array.isArray(raw) ? raw[0] : raw;
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+
+  const record = row as Partial<RpcRateLimitRow>;
+  if (typeof record.allowed !== "boolean") {
+    return null;
+  }
+
+  const remaining = Number(record.remaining ?? 0);
+  const retryAfterSeconds = Number(record.retry_after_seconds ?? 0);
+
+  return {
+    allowed: record.allowed,
+    remaining: Number.isFinite(remaining) ? Math.max(0, Math.trunc(remaining)) : 0,
+    retryAfterSeconds: Number.isFinite(retryAfterSeconds)
+      ? Math.max(0, Math.trunc(retryAfterSeconds))
+      : 0,
+  };
+}
+
+async function checkRateLimitSupabase(
+  supabase: SupabaseRpcClient,
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<RateLimitResult> {
+  const rpcResult = supabase.rpc("consume_rate_limit", {
+    p_scope_key: key,
+    p_limit: limit,
+    p_window_ms: windowMs,
+    p_now: new Date().toISOString(),
+  }) as Promise<{ data: unknown; error: { message?: string | null } | null }>;
+  const { data, error } = await rpcResult;
+
+  if (error) {
+    throw new Error(error.message ?? "Unknown Supabase RPC error.");
+  }
+
+  const parsed = toRateLimitResult(data);
+  if (!parsed) {
+    throw new Error("Unexpected consume_rate_limit response.");
+  }
+
+  return parsed;
+}
+
+export async function checkRateLimitWithProvider(
+  key: string,
+  limit: number,
+  windowMs: number,
+  options?: { supabase?: SupabaseRpcClient }
+): Promise<RateLimitResult> {
+  const provider = (process.env.RATE_LIMIT_PROVIDER ?? "memory").toLowerCase();
+
+  if (provider === "supabase" && options?.supabase) {
+    try {
+      return await checkRateLimitSupabase(options.supabase, key, limit, windowMs);
+    } catch (error) {
+      // Fall back to in-memory limiter to avoid breaking auth/mutation flows.
+      console.error("[rate-limit] Supabase provider failed, falling back to memory.", {
+        provider,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  return checkRateLimit(key, limit, windowMs);
 }

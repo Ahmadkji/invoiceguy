@@ -42,42 +42,63 @@ const initialFormState: ProfileFormState = {
   defaultInvoiceNotes: "",
 };
 
+function toProfileFormState(profile: {
+  businessName?: string | null;
+  fullName?: string | null;
+  email?: string | null;
+  address?: string | null;
+  defaultHourlyRate?: number | null;
+  defaultBillingIncrement?: BillingRule | null;
+  defaultMinimumBillableMinutes?: number | null;
+  defaultCurrency?: string | null;
+  invoiceNumberPrefix?: string | null;
+  nextInvoiceNumber?: number | null;
+  defaultDueDays?: number | null;
+  taxLabel?: string | null;
+  taxPercentage?: number | null;
+  paymentInstructions?: string | null;
+  defaultInvoiceNotes?: string | null;
+}): ProfileFormState {
+  return {
+    businessName: profile.businessName ?? "",
+    fullName: profile.fullName ?? "",
+    email: profile.email ?? "",
+    address: profile.address ?? "",
+    defaultHourlyRate: String(profile.defaultHourlyRate ?? 0),
+    defaultBillingIncrement: profile.defaultBillingIncrement ?? "exact",
+    defaultMinimumBillableMinutes: String(profile.defaultMinimumBillableMinutes ?? ""),
+    defaultCurrency: profile.defaultCurrency ?? "$",
+    invoiceNumberPrefix: profile.invoiceNumberPrefix ?? "INV",
+    nextInvoiceNumber: String(profile.nextInvoiceNumber ?? 1),
+    defaultDueDays: String(profile.defaultDueDays ?? 14),
+    taxLabel: profile.taxLabel ?? "",
+    taxPercentage: String(profile.taxPercentage ?? ""),
+    paymentInstructions: profile.paymentInstructions ?? "",
+    defaultInvoiceNotes: profile.defaultInvoiceNotes ?? "",
+  };
+}
+
 export default function SettingsPage() {
   const storeProfile = useAppStore((s) => s.profile);
-  const [form, setForm] = useState<ProfileFormState>(initialFormState);
-  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState<ProfileFormState>(() =>
+    storeProfile ? toProfileFormState(storeProfile) : initialFormState
+  );
+  const [loading, setLoading] = useState(!storeProfile);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (storeProfile) {
-      setForm({
-        businessName: storeProfile.businessName ?? "",
-        fullName: storeProfile.fullName ?? "",
-        email: storeProfile.email ?? "",
-        address: storeProfile.address ?? "",
-        defaultHourlyRate: String(storeProfile.defaultHourlyRate ?? 0),
-        defaultBillingIncrement: storeProfile.defaultBillingIncrement ?? "exact",
-        defaultMinimumBillableMinutes: String(storeProfile.defaultMinimumBillableMinutes ?? ""),
-        defaultCurrency: storeProfile.defaultCurrency ?? "$",
-        invoiceNumberPrefix: storeProfile.invoiceNumberPrefix ?? "INV",
-        nextInvoiceNumber: String(storeProfile.nextInvoiceNumber ?? 1),
-        defaultDueDays: String(storeProfile.defaultDueDays ?? 14),
-        taxLabel: storeProfile.taxLabel ?? "",
-        taxPercentage: String(storeProfile.taxPercentage ?? ""),
-        paymentInstructions: storeProfile.paymentInstructions ?? "",
-        defaultInvoiceNotes: storeProfile.defaultInvoiceNotes ?? "",
-      });
+      setForm(toProfileFormState(storeProfile));
+      setError(null);
       setLoading(false);
-    } else {
-      // Fallback: fetch directly if store hasn't loaded yet
-      let ignore = false;
-      const loadProfile = async () => {
-        setLoading(true);
-        setError(null);
-        setMessage(null);
-        const response = await fetch("/api/me/profile", { method: "GET" });
+      return;
+    }
+
+    let ignore = false;
+    void fetch("/api/me/profile", { method: "GET" })
+      .then(async (response) => {
         const result = (await response.json().catch(() => null)) as
           | { ok?: boolean; message?: string; profile?: ProfileFormState }
           | null;
@@ -89,10 +110,16 @@ export default function SettingsPage() {
         }
         setForm(result.profile);
         setLoading(false);
-      };
-      void loadProfile();
-      return () => { ignore = true; };
-    }
+      })
+      .catch(() => {
+        if (ignore) return;
+        setError("Unable to load your session. Please sign in again.");
+        setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [storeProfile]);
 
   const setField = <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) => {
@@ -245,7 +272,7 @@ export default function SettingsPage() {
                 }
                 className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
-                <option value="exact">Exact time</option>
+                <option value="exact">Standard time</option>
                 <option value="round_up_5">Round up to 5 min</option>
                 <option value="round_up_10">Round up to 10 min</option>
                 <option value="round_up_15">Round up to 15 min</option>

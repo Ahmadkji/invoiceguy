@@ -184,10 +184,59 @@ body {
   }
 }
 
+/* Mobile-optimized form controls: prevent iOS auto-zoom, ensure touch targets */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  select {
+    /* Extra padding for native select touch targets */
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+}
+
+/* Touch interaction optimization */
+button,
+a[role="button"],
+[role="button"],
+input[type="submit"],
+input[type="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Minimum touch target for interactive elements on small screens */
+@media (max-width: 767px) {
+  button,
+  a[role="button"],
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 /* Mobile sidebar: ensure no margin-left when sidebar is hidden */
 @media (max-width: 767px) {
   /* Prevent body scroll when sidebar overlay is open */
-  body:has(aside + div > div[class*="bg-black/40"]) {
+  body[data-sidebar-open="true"] {
     overflow: hidden;
   }
 }

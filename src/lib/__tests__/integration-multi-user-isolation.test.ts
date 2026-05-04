@@ -75,7 +75,7 @@ async function createInvoiceAs(cookieHeader: string, clientId: string): Promise<
       clientId,
       invoiceDate: today,
       dueDate: due,
-      detailLevel: "standard",
+      detailLevel: "detailed",
       status: "draft",
       notes: "",
       paymentInstructions: "",

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { checkRateLimitWithProvider } from "@/lib/security/rate-limit";
 import { createRouteClient } from "@/lib/supabase/route";
 import { getClientIp, hasAllowedOrigin } from "@/lib/security/request";
 import { getSafeNextPath } from "@/lib/security/paths";
@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Forbidden." }, { status: 403 });
   }
 
+  const { supabase, withCookies } = createRouteClient(request);
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit(`auth:signup:ip:${ip}`, 10, 60_000);
+  const ipLimit = await checkRateLimitWithProvider(`auth:signup:ip:${ip}`, 10, 60_000, { supabase });
   if (!ipLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many attempts. Try again shortly." },
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const emailLimit = checkRateLimit(`auth:signup:email:${email}`, 5, 15 * 60_000);
+  const emailLimit = await checkRateLimitWithProvider(`auth:signup:email:${email}`, 5, 15 * 60_000, { supabase });
   if (!emailLimit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many attempts. Try again later." },
@@ -69,7 +70,6 @@ export async function POST(request: NextRequest) {
   const callbackUrl = new URL("/auth/callback", request.nextUrl.origin);
   callbackUrl.searchParams.set("next", nextPath);
 
-  const { supabase, withCookies } = createRouteClient(request);
   const { data, error } = await supabase.auth.signUp({
     email,
     password,

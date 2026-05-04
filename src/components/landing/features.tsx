@@ -19,7 +19,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Billing Rules",
-    description: "Set 15-min rounding, 30-min minimums, or exact time per client. The math is automatic.",
+    description: "Set 15-min rounding, 30-min minimums, or standard time per client. The math is automatic.",
     color: "bg-emerald-50 text-emerald-600",
   },
   {
@@ -31,7 +31,7 @@ const features = [
   {
     icon: Shield,
     title: "Transparent Billing",
-    description: "Every entry shows actual time, billed time, and the rule applied. Clients trust what they understand.",
+    description: "Every entry shows tracked time and the rule applied. Clients trust what they understand.",
     color: "bg-rose-50 text-rose-600",
   },
   {
