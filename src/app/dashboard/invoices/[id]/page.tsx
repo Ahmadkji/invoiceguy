@@ -8,14 +8,11 @@ import {
   FileText,
   Send,
   CheckCircle,
-  Calendar,
-  Clock,
 } from "lucide-react";
 import Link from "next/link";
 import { Client, Invoice, InvoiceItem, TimeEntry, UserProfile } from "@/lib/types";
 import { InvoiceCanvas } from "@/components/invoices/invoice-canvas";
 import { StatusBadge } from "@/components/invoices/status-badge";
-import { formatCurrency } from "@/lib/billing-rules";
 import { useNow } from "@/lib/hooks/use-now";
 import { downloadInvoicePdf } from "@/lib/invoices/download-pdf";
 import { useAppStore } from "@/lib/store/use-app-store";
@@ -263,41 +260,6 @@ export default function InvoicePreviewPage() {
           </button>
 
 
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-4 print:hidden">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Date</span>
-            <span className="text-sm font-semibold text-slate-700">
-              {new Date(invoice.invoiceDate).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-          </div>
-          {invoice.dueDate && (
-            <div className="flex items-center gap-2">
-              <Clock className={`w-4 h-4 ${isOverdue ? "text-red-400" : "text-slate-400"}`} />
-              <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Due</span>
-              <span className={`text-sm font-semibold ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
-                {new Date(invoice.dueDate).toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center gap-2 sm:ml-auto">
-            <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total</span>
-            <span className="text-lg font-bold text-emerald-600 font-mono-nums">
-              {formatCurrency(invoice.totalAmount)}
-            </span>
-          </div>
         </div>
       </div>
 

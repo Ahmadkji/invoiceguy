@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Timer, Plus, Zap, CheckCircle, X, UserPlus, FolderPlus } from "lucide-react";
+import { Timer, Plus, Zap, CheckCircle, X, UserPlus, FolderPlus, FileText } from "lucide-react";
 import { useAppStore } from "@/lib/store/use-app-store";
 import {
   formatMinutes,
@@ -982,6 +982,17 @@ export default function TimeTrackingPage() {
                       {isInvoiced ? "Invoiced" : "Uninvoiced"}
                     </span>
                   </div>
+                  {!isInvoiced ? (
+                    <div className="col-span-2 sm:col-span-1 sm:w-auto sm:justify-self-end">
+                      <Link
+                        href="/dashboard/invoices/new"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Create invoice
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

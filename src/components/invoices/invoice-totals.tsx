@@ -1,70 +1,51 @@
 "use client";
 
-import { formatCurrency } from "@/lib/billing-rules";
-import { Invoice, UserProfile } from "@/lib/types";
-
 interface InvoiceTotalsProps {
-  invoice: Invoice;
-  profile: UserProfile;
+  subtotal: string;
+  tax: string;
+  discount: string;
+  amountDue: string;
+  taxLabel: string;
+  showTax: boolean;
+  showDiscount: boolean;
 }
 
-export function InvoiceTotals({ invoice, profile }: InvoiceTotalsProps) {
-  const showTaxRate =
-    invoice.taxAmount > 0 && typeof profile.taxPercentage === "number";
-  const formattedTaxRate = showTaxRate
-    ? `${Number.isInteger(profile.taxPercentage) ? profile.taxPercentage : profile.taxPercentage?.toFixed(2)}%`
-    : null;
-
+function TotalRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="w-full border border-slate-300 bg-white p-4">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between text-sm text-slate-600">
-          <span>Subtotal</span>
-          <span className="font-mono text-slate-900">
-            {formatCurrency(invoice.subtotal, profile.defaultCurrency)}
-          </span>
+    <div className="flex items-center justify-between border-b border-[#e0ccb0] py-4 text-base text-[#2e241b]">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#5f5042]">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+export function InvoiceTotals({
+  subtotal,
+  tax,
+  discount,
+  amountDue,
+  taxLabel,
+  showTax,
+  showDiscount,
+}: InvoiceTotalsProps) {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <TotalRow label="Subtotal" value={subtotal} />
+        {showTax ? <TotalRow label={taxLabel} value={tax} /> : null}
+        {showDiscount ? <TotalRow label="Discount" value={discount} /> : null}
+      </div>
+
+      <div className="rounded-[26px] border border-[#cda56d] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,239,227,0.96))] px-6 py-7 text-center shadow-[0_18px_50px_rgba(188,151,98,0.12)]">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.36em] text-[#9c7846]">Amount Due</p>
+        <div className="mx-auto mt-3 flex max-w-[190px] items-center gap-3 text-[#c29a62]">
+          <div className="h-px flex-1 bg-[#d7bb92]" />
+          <span className="text-base">*</span>
+          <div className="h-px flex-1 bg-[#d7bb92]" />
         </div>
-
-        {showTaxRate && (
-          <div className="flex items-center justify-between text-sm text-slate-600">
-            <span>Tax Rate</span>
-            <span className="font-mono text-slate-900">{formattedTaxRate}</span>
-          </div>
-        )}
-
-        {invoice.taxAmount > 0 && (
-          <div className="flex items-center justify-between text-sm text-slate-600">
-            <span>{profile.taxLabel || "Tax"}</span>
-            <span className="font-mono text-slate-900">
-              {formatCurrency(invoice.taxAmount, profile.defaultCurrency)}
-            </span>
-          </div>
-        )}
-
-        {invoice.discountAmount > 0 && (
-          <div className="flex items-center justify-between text-sm text-slate-600">
-            <span>Discount</span>
-            <span className="font-mono text-slate-900">
-              -{formatCurrency(invoice.discountAmount, profile.defaultCurrency)}
-            </span>
-          </div>
-        )}
-
-        <div className="border-t border-slate-300 pt-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Total
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {profile.defaultCurrency === "$" ? "USD" : profile.defaultCurrency}
-              </p>
-            </div>
-            <span className="font-mono text-2xl font-bold text-slate-900">
-              {formatCurrency(invoice.totalAmount, profile.defaultCurrency)}
-            </span>
-          </div>
-        </div>
+        <p className="mt-5 break-words font-serif text-[3.6rem] leading-none text-[#111111] sm:text-[4.6rem]">
+          {amountDue}
+        </p>
       </div>
     </div>
   );

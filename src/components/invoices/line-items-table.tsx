@@ -1,143 +1,90 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  formatCurrency,
-  formatMinutes,
-  formatTimeRange,
-  getRuleLabel,
-} from "@/lib/billing-rules";
-import { InvoiceItem, TimeEntry } from "@/lib/types";
+import { PresentedInvoiceLineItem } from "@/lib/invoices/presentation";
 
 interface LineItemsTableProps {
-  invoiceItems: InvoiceItem[];
-  timeEntries: TimeEntry[];
-  projects: { id: string; name: string }[];
+  lineItems: PresentedInvoiceLineItem[];
 }
 
-export function LineItemsTable({
-  invoiceItems,
-  timeEntries,
-  projects,
-}: LineItemsTableProps) {
-  const sortedItems = [...invoiceItems].sort((a, b) => a.sortOrder - b.sortOrder);
-
+export function LineItemsTable({ lineItems }: LineItemsTableProps) {
   const headerClass =
-    "px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-600";
-  const rightHeaderClass =
-    "px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.14em] text-slate-600";
-  const cellClass = "border-t border-slate-300 px-4 py-3.5 text-sm text-slate-700";
+    "border-r border-[#d9c3a1] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-[#5f5042] last:border-r-0";
+  const rightHeaderClass = `${headerClass} text-right`;
+  const cellClass =
+    "border-r border-t border-[#e6d7c2] px-4 py-5 text-sm text-[#4e4134] align-top last:border-r-0";
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className="overflow-x-auto border border-slate-300 bg-white"
+      transition={{ duration: 0.22 }}
+      className="overflow-hidden rounded-[24px] border border-[#d9c3a1] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(252,247,240,0.95))] shadow-[0_16px_45px_rgba(188,151,98,0.08)]"
     >
-      {/* Mobile layout */}
-      <div className="divide-y divide-slate-200 md:hidden">
-        {sortedItems.map((item) => {
-          const entry = timeEntries.find((e) => e.id === item.timeEntryId);
-          const project = projects.find((p) => p.id === entry?.projectId);
-          const projectDisplayName = item.projectNameSnapshot || project?.name || "Hourly work";
+      <div className="divide-y divide-[#eadbc7] lg:hidden">
+        {lineItems.map((item) => (
+          <div key={item.id} className="space-y-3 p-4 sm:p-5">
+            <div className="text-sm font-medium uppercase tracking-[0.2em] text-[#a8834d]">{item.date}</div>
+            <div className="font-serif text-2xl text-[#18120d]">{item.description}</div>
+            <div className="text-sm text-[#7b6854]">{item.meta}</div>
 
-          return (
-            <div key={item.id} className="p-4 space-y-2">
-              <div className="text-sm font-semibold text-slate-900">{item.description}</div>
-              <div className="text-xs text-slate-500">
-                {entry ? getRuleLabel(entry.billingRuleSnapshot.rule) : "Manual entry"} · {projectDisplayName}
+            <div className="grid grid-cols-2 gap-4 border-t border-[#eadbc7] pt-4 text-sm">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#9c7c4d]">
+                  Time
+                </div>
+                <div className="mt-1 text-[#3f3429]">{item.session}</div>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                {entry?.entryDate && (
-                  <div>
-                    <div className="text-slate-400 uppercase tracking-wide">Date</div>
-                    <div className="mt-0.5 text-sm text-slate-700">
-                      {new Date(entry.entryDate).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <div className="text-slate-400 uppercase tracking-wide">Session</div>
-                  <div className="mt-0.5 text-sm text-slate-700 font-mono">
-                    {entry ? formatTimeRange(entry.startTime, entry.endTime) || "—" : "—"}
-                  </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#9c7c4d]">
+                  Hours
                 </div>
-                <div>
-                  <div className="text-slate-400 uppercase tracking-wide">Time</div>
-                  <div className="mt-0.5 text-sm text-slate-700 font-mono">
-                    {formatMinutes(item.billedMinutes)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-slate-400 uppercase tracking-wide">Rate</div>
-                  <div className="mt-0.5 text-sm text-slate-700 font-mono">
-                    {formatCurrency(item.hourlyRate)}/hr
-                  </div>
-                </div>
+                <div className="mt-1 text-[#3f3429]">{item.hours}</div>
               </div>
-              <div className="text-sm font-semibold text-slate-900 font-mono">
-                {formatCurrency(item.amount)}
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#9c7c4d]">
+                  Rate
+                </div>
+                <div className="mt-1 text-[#3f3429]">{item.rate}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#9c7c4d]">
+                  Amount
+                </div>
+                <div className="mt-1 font-semibold text-[#18120d]">{item.amount}</div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
-      {/* Desktop layout */}
-      <table className="hidden md:table w-full min-w-[820px]">
-        <thead className="bg-slate-100">
+      <table className="hidden w-full table-fixed lg:table">
+        <thead className="bg-[linear-gradient(180deg,rgba(250,242,230,0.95),rgba(246,236,220,0.98))]">
           <tr>
-            <th className={headerClass}>Date</th>
-            <th className={headerClass}>Session</th>
-            <th className={`${headerClass} w-full`}>Description</th>
-            <th className={rightHeaderClass}>Time</th>
-            <th className={rightHeaderClass}>Rate</th>
-            <th className={rightHeaderClass}>Amount</th>
+            <th className={`${headerClass} w-[132px]`}>Date</th>
+            <th className={`${headerClass} w-[128px]`}>Time</th>
+            <th className={`${headerClass} w-auto`}>Description</th>
+            <th className={`${rightHeaderClass} w-[108px]`}>Hours</th>
+            <th className={`${rightHeaderClass} w-[130px]`}>Rate</th>
+            <th className={`${rightHeaderClass} w-[120px]`}>Amount</th>
           </tr>
         </thead>
         <tbody>
-          {sortedItems.map((item) => {
-            const entry = timeEntries.find((e) => e.id === item.timeEntryId);
-            const project = projects.find((p) => p.id === entry?.projectId);
-            const projectDisplayName = item.projectNameSnapshot || project?.name || "Hourly work";
-
-            return (
-              <tr key={item.id}>
-                <td className={`${cellClass} whitespace-nowrap text-slate-500`}>
-                  {entry?.entryDate
-                    ? new Date(entry.entryDate).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : "—"}
-                </td>
-                <td className={`${cellClass} whitespace-nowrap text-slate-500 font-mono`}>
-                  {entry ? formatTimeRange(entry.startTime, entry.endTime) || "—" : "—"}
-                </td>
-                <td className={cellClass}>
-                  <div className="font-medium text-slate-900">{item.description}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {entry ? getRuleLabel(entry.billingRuleSnapshot.rule) : "Manual entry"} · {projectDisplayName}
-                  </div>
-                </td>
-                <td className={`${cellClass} text-right font-mono`}>
-                  {formatMinutes(item.billedMinutes)}
-                </td>
-                <td className={`${cellClass} text-right font-mono`}>
-                  {formatCurrency(item.hourlyRate)}/hr
-                </td>
-                <td className={`${cellClass} text-right font-mono font-semibold text-slate-900`}>
-                  {formatCurrency(item.amount)}
-                </td>
-              </tr>
-            );
-          })}
+          {lineItems.map((item) => (
+            <tr key={item.id}>
+              <td className={`${cellClass} whitespace-nowrap text-[#3f3429]`}>{item.date}</td>
+              <td className={`${cellClass} whitespace-nowrap text-[#3f3429]`}>{item.session}</td>
+              <td className={cellClass}>
+                <div className="break-words font-medium text-[#18120d]">{item.description}</div>
+                <div className="mt-1.5 break-words text-xs text-[#8c7558]">{item.meta}</div>
+              </td>
+              <td className={`${cellClass} whitespace-nowrap text-right`}>{item.hours}</td>
+              <td className={`${cellClass} whitespace-nowrap text-right`}>{item.rate}</td>
+              <td className={`${cellClass} whitespace-nowrap text-right font-semibold text-[#18120d]`}>
+                {item.amount}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </motion.div>
