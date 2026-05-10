@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/billing-rules";
+import { formatInvoiceDate, isInvoiceOverdue } from "@/lib/invoices/date";
 import { downloadInvoicePdf } from "@/lib/invoices/download-pdf";
 import { Invoice, InvoiceStatus } from "@/lib/types";
 import { StatusBadge } from "@/components/invoices/status-badge";
@@ -31,6 +32,17 @@ type InvoiceStatusResponse = {
   code?: string;
   message?: string;
   invoice?: Invoice;
+};
+
+const INVOICE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
+
+const DUE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
 };
 
 export default function InvoicesPage() {
@@ -117,13 +129,13 @@ export default function InvoicesPage() {
       })
       .reduce((sum, invoice) => sum + invoice.totalAmount, 0);
 
-    const overdue = invoices.filter((invoice) => {
-      if (!invoice.dueDate || invoice.status === "paid" || invoice.status === "void") {
-        return false;
-      }
-
-      return new Date(invoice.dueDate).getTime() < now;
-    }).length;
+    const overdue = invoices.filter((invoice) =>
+      isInvoiceOverdue({
+        dueDate: invoice.dueDate,
+        status: invoice.status,
+        now,
+      })
+    ).length;
 
     return {
       outstanding,
@@ -306,10 +318,11 @@ export default function InvoicesPage() {
                 <div className="divide-y divide-slate-100 md:hidden">
                   {filteredInvoices.map((invoice, index) => {
                     const client = clientById.get(invoice.clientId);
-                    const isOverdue =
-                      invoice.dueDate &&
-                      new Date(invoice.dueDate).getTime() < now &&
-                      invoice.status !== "paid";
+                    const isOverdue = isInvoiceOverdue({
+                      dueDate: invoice.dueDate,
+                      status: invoice.status,
+                      now,
+                    });
                     const isMutating = pendingInvoiceId === invoice.id;
                     const isDownloadingPdf = pendingPdfInvoiceId === invoice.id;
 
@@ -329,7 +342,7 @@ export default function InvoicesPage() {
                           >
                             {invoice.invoiceNumber}
                           </Link>
-                          <StatusBadge status={invoice.status} overdue={Boolean(isOverdue)} size="sm" />
+                          <StatusBadge status={invoice.status} overdue={isOverdue} size="sm" />
                         </div>
 
                         <div className="mt-3 flex items-center gap-2.5">
@@ -351,22 +364,13 @@ export default function InvoicesPage() {
                           <div>
                             <div className="uppercase tracking-wider text-[10px] text-slate-400">Invoice date</div>
                             <div className="mt-1 text-sm text-slate-700">
-                              {new Date(invoice.invoiceDate).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
+                              {formatInvoiceDate(invoice.invoiceDate, INVOICE_DATE_FORMAT)}
                             </div>
                           </div>
                           <div>
                             <div className="uppercase tracking-wider text-[10px] text-slate-400">Due</div>
                             <div className={`mt-1 text-sm ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>
-                              {invoice.dueDate
-                                ? new Date(invoice.dueDate).toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                  })
-                                : "—"}
+                              {formatInvoiceDate(invoice.dueDate, DUE_DATE_FORMAT)}
                             </div>
                           </div>
                         </div>
@@ -435,10 +439,11 @@ export default function InvoicesPage() {
                     <tbody>
                       {filteredInvoices.map((invoice, index) => {
                         const client = clientById.get(invoice.clientId);
-                        const isOverdue =
-                          invoice.dueDate &&
-                          new Date(invoice.dueDate).getTime() < now &&
-                          invoice.status !== "paid";
+                        const isOverdue = isInvoiceOverdue({
+                          dueDate: invoice.dueDate,
+                          status: invoice.status,
+                          now,
+                        });
                         const isMutating = pendingInvoiceId === invoice.id;
                         const isDownloadingPdf = pendingPdfInvoiceId === invoice.id;
 
@@ -470,7 +475,7 @@ export default function InvoicesPage() {
                                   {client?.name?.charAt(0) || "?"}
                                 </div>
                                 <div>
-                                  <div className="text-sm font-medium text-slate-900">{client?.name}</div>
+                                  <div className="text-sm font-medium text-slate-900">{client?.name ?? "Unknown client"}</div>
                                   {client?.companyName && (
                                     <div className="text-xs text-slate-400">{client.companyName}</div>
                                   )}
@@ -481,11 +486,7 @@ export default function InvoicesPage() {
                             <td className="py-4 px-5">
                               <div className="flex items-center gap-1.5 text-sm text-slate-600">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                {new Date(invoice.invoiceDate).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })}
+                                {formatInvoiceDate(invoice.invoiceDate, INVOICE_DATE_FORMAT)}
                               </div>
                             </td>
 
@@ -494,10 +495,7 @@ export default function InvoicesPage() {
                                 <div className="flex items-center gap-1.5 text-sm">
                                   <Clock className={`w-3.5 h-3.5 ${isOverdue ? "text-red-400" : "text-slate-400"}`} />
                                   <span className={isOverdue ? "text-red-600 font-semibold" : "text-slate-600"}>
-                                    {new Date(invoice.dueDate).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                    })}
+                                    {formatInvoiceDate(invoice.dueDate, DUE_DATE_FORMAT)}
                                   </span>
                                 </div>
                               ) : (
@@ -506,7 +504,7 @@ export default function InvoicesPage() {
                             </td>
 
                             <td className="py-4 px-5">
-                              <StatusBadge status={invoice.status} overdue={Boolean(isOverdue)} size="sm" />
+                              <StatusBadge status={invoice.status} overdue={isOverdue} size="sm" />
                             </td>
 
                             <td className="py-4 px-5 text-right">
@@ -529,7 +527,7 @@ export default function InvoicesPage() {
                                 <button
                                   onClick={() => void handleDownloadPdf(invoice.id, invoice.invoiceNumber)}
                                   disabled={isDownloadingPdf}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 disabled:opacity-60 disabled:cursor-not-allowed"
                                   title="Download PDF"
                                 >
                                   <Download className="w-3.5 h-3.5" />
