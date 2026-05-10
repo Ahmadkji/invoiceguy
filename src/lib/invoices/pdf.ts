@@ -25,6 +25,9 @@ const PAGE_HEIGHT = 841.89;
 const PAGE_MARGIN = 34;
 const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
 const FOOTER_HEIGHT = 42;
+const HEADER_HEIGHT = 31;
+const MIN_TABLE_ROW_HEIGHT = 43;
+const TABLE_CELL_PADDING = 8;
 
 const COLORS = {
   paper: rgb(0.996, 0.985, 0.965),
@@ -34,6 +37,17 @@ const COLORS = {
   accent: rgb(0.698, 0.549, 0.325),
   pill: rgb(0.953, 0.91, 0.835),
 };
+
+const TABLE_COLUMNS = {
+  date: { x: PAGE_MARGIN, width: 68, label: "DATE" },
+  time: { x: PAGE_MARGIN + 68, width: 70, label: "TIME" },
+  desc: { x: PAGE_MARGIN + 138, width: 205, label: "DESCRIPTION" },
+  hours: { x: PAGE_MARGIN + 343, width: 55, label: "HOURS" },
+  rate: { x: PAGE_MARGIN + 398, width: 82, label: "RATE" },
+  amount: { x: PAGE_MARGIN + 480, width: CONTENT_WIDTH - 480, label: "AMOUNT" },
+};
+
+type PdfColor = ReturnType<typeof rgb>;
 
 type PdfContext = {
   doc: PDFDocument;
@@ -73,10 +87,14 @@ function addStyledPage(ctx: PdfContext) {
     color: rgb(0.968, 0.923, 0.853),
   });
 
-  ctx.page.drawText("THANK YOU", {
-    x: PAGE_WIDTH / 2 - ctx.sansBold.widthOfTextAtSize("THANK YOU", 11) / 2,
+  drawCenteredText({
+    page: ctx.page,
+    text: "THANK YOU",
+    centerX: PAGE_WIDTH / 2,
     y: 16,
-    size: 11,
+    maxWidth: 120,
+    preferredSize: 11,
+    minSize: 8,
     font: ctx.sansBold,
     color: COLORS.accent,
   });
@@ -195,11 +213,67 @@ function drawTextFit({
   preferredSize: number;
   minSize: number;
   font: PDFFont;
-  color: ReturnType<typeof rgb>;
+  color: PdfColor;
 }) {
   const safeText = toPdfText(text);
   const size = getFittedFontSize(safeText, font, maxWidth, preferredSize, minSize);
   page.drawText(safeText, { x, y, size, font, color });
+  return size;
+}
+
+function drawRightAlignedText({
+  page,
+  text,
+  rightX,
+  y,
+  maxWidth,
+  preferredSize,
+  minSize,
+  font,
+  color,
+}: {
+  page: PDFPage;
+  text: string;
+  rightX: number;
+  y: number;
+  maxWidth: number;
+  preferredSize: number;
+  minSize: number;
+  font: PDFFont;
+  color: PdfColor;
+}) {
+  const safeText = toPdfText(text);
+  const size = getFittedFontSize(safeText, font, maxWidth, preferredSize, minSize);
+  const width = font.widthOfTextAtSize(safeText, size);
+  page.drawText(safeText, { x: rightX - width, y, size, font, color });
+  return size;
+}
+
+function drawCenteredText({
+  page,
+  text,
+  centerX,
+  y,
+  maxWidth,
+  preferredSize,
+  minSize,
+  font,
+  color,
+}: {
+  page: PDFPage;
+  text: string;
+  centerX: number;
+  y: number;
+  maxWidth: number;
+  preferredSize: number;
+  minSize: number;
+  font: PDFFont;
+  color: PdfColor;
+}) {
+  const safeText = toPdfText(text);
+  const size = getFittedFontSize(safeText, font, maxWidth, preferredSize, minSize);
+  const width = font.widthOfTextAtSize(safeText, size);
+  page.drawText(safeText, { x: centerX - width / 2, y, size, font, color });
   return size;
 }
 
@@ -249,24 +323,38 @@ function drawLabelRow(
 }
 
 function drawTableHeader(ctx: PdfContext, y: number) {
-  const columnXs = [PAGE_MARGIN, PAGE_MARGIN + 79, PAGE_MARGIN + 157, PAGE_MARGIN + 343, PAGE_MARGIN + 428, PAGE_MARGIN + 494];
-  const headerHeight = 31;
-
   ctx.page.drawRectangle({
     x: PAGE_MARGIN,
-    y: y - headerHeight,
+    y: y - HEADER_HEIGHT,
     width: CONTENT_WIDTH,
-    height: headerHeight,
+    height: HEADER_HEIGHT,
     borderColor: COLORS.line,
     borderWidth: 1,
     color: rgb(0.987, 0.971, 0.945),
   });
 
-  const headers = ["DATE", "TIME", "DESCRIPTION", "HOURS", "RATE", "AMOUNT"];
-  headers.forEach((label, index) => {
-    ctx.page.drawText(label, {
-      x: columnXs[index] + 10,
-      y: y - 20,
+  Object.values(TABLE_COLUMNS).forEach((column) => {
+    const isNumeric = ["HOURS", "RATE", "AMOUNT"].includes(column.label);
+    const textY = y - 20;
+
+    if (isNumeric) {
+      drawRightAlignedText({
+        page: ctx.page,
+        text: column.label,
+        rightX: column.x + column.width - TABLE_CELL_PADDING,
+        y: textY,
+        maxWidth: column.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 10,
+        minSize: 7,
+        font: ctx.sansBold,
+        color: COLORS.muted,
+      });
+      return;
+    }
+
+    ctx.page.drawText(column.label, {
+      x: column.x + TABLE_CELL_PADDING,
+      y: textY,
       size: 10,
       font: ctx.sansBold,
       color: COLORS.muted,
@@ -274,30 +362,56 @@ function drawTableHeader(ctx: PdfContext, y: number) {
   });
 }
 
-function drawTableGrid(
-  ctx: PdfContext,
-  topY: number,
-  rowHeight: number,
-  rowCount: number,
-) {
+function drawTableGrid(ctx: PdfContext, topY: number, rowHeights: number[]) {
   const xPositions = [
-    PAGE_MARGIN,
-    PAGE_MARGIN + 79,
-    PAGE_MARGIN + 157,
-    PAGE_MARGIN + 343,
-    PAGE_MARGIN + 428,
-    PAGE_MARGIN + 494,
+    TABLE_COLUMNS.date.x,
+    TABLE_COLUMNS.time.x,
+    TABLE_COLUMNS.desc.x,
+    TABLE_COLUMNS.hours.x,
+    TABLE_COLUMNS.rate.x,
+    TABLE_COLUMNS.amount.x,
     PAGE_WIDTH - PAGE_MARGIN,
   ];
+  const totalHeight = rowHeights.reduce((sum, height) => sum + height, 0);
 
   for (const x of xPositions) {
     ctx.page.drawLine({
       start: { x, y: topY },
-      end: { x, y: topY - rowHeight * rowCount },
+      end: { x, y: topY - totalHeight },
       thickness: 0.7,
       color: rgb(0.902, 0.854, 0.785),
     });
   }
+
+  let y = topY;
+  for (const rowHeight of rowHeights) {
+    y -= rowHeight;
+    ctx.page.drawLine({
+      start: { x: PAGE_MARGIN, y },
+      end: { x: PAGE_WIDTH - PAGE_MARGIN, y },
+      thickness: 0.7,
+      color: rgb(0.902, 0.854, 0.785),
+    });
+  }
+}
+
+function getLineItemText(item: PresentedInvoiceLineItem, ctx: PdfContext) {
+  const descriptionLines = wrapText(
+    item.description,
+    ctx.sans,
+    10,
+    TABLE_COLUMNS.desc.width - TABLE_CELL_PADDING * 2,
+  ).slice(0, 3);
+  const metaLines = item.meta
+    ? wrapText(item.meta, ctx.sans, 8, TABLE_COLUMNS.desc.width - TABLE_CELL_PADDING * 2).slice(0, 1)
+    : [];
+
+  return { descriptionLines, metaLines };
+}
+
+function getLineItemRowHeight(item: PresentedInvoiceLineItem, ctx: PdfContext) {
+  const { descriptionLines, metaLines } = getLineItemText(item, ctx);
+  return Math.max(MIN_TABLE_ROW_HEIGHT, 22 + descriptionLines.length * 12 + metaLines.length * 10);
 }
 
 function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem[]) {
@@ -333,42 +447,48 @@ function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem
   let index = 0;
 
   while (index < lineItems.length) {
-    ensureSpace(ctx, 160);
+    ensureSpace(ctx, HEADER_HEIGHT + MIN_TABLE_ROW_HEIGHT + 24);
 
     const tableTopY = ctx.y;
     drawTableHeader(ctx, tableTopY);
-    const bodyTopY = tableTopY - 31;
-    const rowHeight = 43;
-    const availableRows = Math.max(1, Math.floor((bodyTopY - (FOOTER_HEIGHT + 120)) / rowHeight));
-    const pageItems = lineItems.slice(index, index + availableRows);
+    let rowTop = tableTopY - HEADER_HEIGHT;
+    const pageItems: PresentedInvoiceLineItem[] = [];
+    const rowHeights: number[] = [];
 
-    drawTableGrid(ctx, bodyTopY, rowHeight, pageItems.length);
+    while (index + pageItems.length < lineItems.length) {
+      const candidate = lineItems[index + pageItems.length];
+      const candidateHeight = getLineItemRowHeight(candidate, ctx);
+      const usedHeight = rowHeights.reduce((sum, height) => sum + height, 0);
+      const remainingY = rowTop - usedHeight - candidateHeight;
+
+      if (pageItems.length > 0 && remainingY < FOOTER_HEIGHT + 118) {
+        break;
+      }
+
+      pageItems.push(candidate);
+      rowHeights.push(candidateHeight);
+
+      if (remainingY < FOOTER_HEIGHT + 118) {
+        break;
+      }
+    }
+
+    drawTableGrid(ctx, rowTop, rowHeights);
 
     pageItems.forEach((item, rowIndex) => {
-      const rowTop = bodyTopY - rowHeight * rowIndex;
-      const centers = {
-        date: PAGE_MARGIN + 10,
-        time: PAGE_MARGIN + 89,
-        desc: PAGE_MARGIN + 167,
-        hours: PAGE_MARGIN + 353,
-        rate: PAGE_MARGIN + 438,
-        amount: PAGE_MARGIN + 504,
-      };
-
-      ctx.page.drawLine({
-        start: { x: PAGE_MARGIN, y: rowTop - rowHeight },
-        end: { x: PAGE_WIDTH - PAGE_MARGIN, y: rowTop - rowHeight },
-        thickness: 0.7,
-        color: rgb(0.902, 0.854, 0.785),
-      });
+      const rowHeight = rowHeights[rowIndex];
+      const contentTop = rowTop - rowHeights.slice(0, rowIndex).reduce((sum, height) => sum + height, 0);
+      const singleLineY = contentTop - rowHeight / 2 - 4;
+      const { descriptionLines, metaLines } = getLineItemText(item, ctx);
+      let descriptionY = contentTop - 16;
 
       drawTextFit({
         page: ctx.page,
         text: item.date,
-        x: centers.date,
-        y: rowTop - 26,
-        maxWidth: 60,
-        preferredSize: 10,
+        x: TABLE_COLUMNS.date.x + TABLE_CELL_PADDING,
+        y: singleLineY,
+        maxWidth: TABLE_COLUMNS.date.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 9,
         minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
@@ -376,64 +496,72 @@ function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem
       drawTextFit({
         page: ctx.page,
         text: item.session,
-        x: centers.time,
-        y: rowTop - 26,
-        maxWidth: 58,
-        preferredSize: 10,
+        x: TABLE_COLUMNS.time.x + TABLE_CELL_PADDING,
+        y: singleLineY,
+        maxWidth: TABLE_COLUMNS.time.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 9,
         minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
 
-      const descriptionLines = wrapText(item.description, ctx.sans, 10, 165).slice(0, 2);
-      let descriptionY = rowTop - 20;
       for (const line of descriptionLines) {
         ctx.page.drawText(toPdfText(line), {
-          x: centers.desc,
+          x: TABLE_COLUMNS.desc.x + TABLE_CELL_PADDING,
           y: descriptionY,
           size: 10,
-          font: descriptionY === rowTop - 20 ? ctx.sansBold : ctx.sans,
+          font: descriptionY === contentTop - 16 ? ctx.sansBold : ctx.sans,
           color: COLORS.text,
         });
         descriptionY -= 12;
       }
 
-      drawTextFit({
+      for (const line of metaLines) {
+        ctx.page.drawText(toPdfText(line), {
+          x: TABLE_COLUMNS.desc.x + TABLE_CELL_PADDING,
+          y: descriptionY - 1,
+          size: 8,
+          font: ctx.sans,
+          color: COLORS.muted,
+        });
+      }
+
+      drawRightAlignedText({
         page: ctx.page,
         text: item.hours,
-        x: centers.hours,
-        y: rowTop - 26,
-        maxWidth: 60,
-        preferredSize: 10,
+        rightX: TABLE_COLUMNS.hours.x + TABLE_COLUMNS.hours.width - TABLE_CELL_PADDING,
+        y: singleLineY,
+        maxWidth: TABLE_COLUMNS.hours.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 9,
         minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
-      drawTextFit({
+      drawRightAlignedText({
         page: ctx.page,
         text: item.rate,
-        x: centers.rate,
-        y: rowTop - 26,
-        maxWidth: 52,
-        preferredSize: 10,
+        rightX: TABLE_COLUMNS.rate.x + TABLE_COLUMNS.rate.width - TABLE_CELL_PADDING,
+        y: singleLineY,
+        maxWidth: TABLE_COLUMNS.rate.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 9,
         minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
-      drawTextFit({
+      drawRightAlignedText({
         page: ctx.page,
         text: item.amount,
-        x: centers.amount,
-        y: rowTop - 26,
-        maxWidth: 52,
-        preferredSize: 10,
+        rightX: TABLE_COLUMNS.amount.x + TABLE_COLUMNS.amount.width - TABLE_CELL_PADDING,
+        y: singleLineY,
+        maxWidth: TABLE_COLUMNS.amount.width - TABLE_CELL_PADDING * 2,
+        preferredSize: 9,
         minSize: 7,
         font: ctx.sansBold,
         color: COLORS.text,
       });
     });
 
-    ctx.y = bodyTopY - rowHeight * pageItems.length - 28;
+    ctx.y = rowTop - rowHeights.reduce((sum, height) => sum + height, 0) - 28;
     index += pageItems.length;
 
     if (index < lineItems.length) {
@@ -752,24 +880,32 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
     borderWidth: 1.2,
     color: rgb(0.997, 0.99, 0.975),
   });
-  ctx.page.drawText("AMOUNT DUE", {
-    x: totalsStartX + 74,
+  const amountCardCenterX = totalsStartX + totalsWidth / 2;
+  drawCenteredText({
+    page: ctx.page,
+    text: "AMOUNT DUE",
+    centerX: amountCardCenterX,
     y: amountCardY + 22,
-    size: 12,
+    maxWidth: totalsWidth - 48,
+    preferredSize: 12,
+    minSize: 9,
     font: ctx.sansBold,
     color: COLORS.accent,
   });
   ctx.page.drawLine({
-    start: { x: totalsStartX + 74, y: amountCardY + 16 },
-    end: { x: totalsStartX + totalsWidth - 84, y: amountCardY + 16 },
+    start: { x: totalsStartX + 48, y: amountCardY + 16 },
+    end: { x: totalsStartX + totalsWidth - 48, y: amountCardY + 16 },
     thickness: 1,
     color: COLORS.line,
   });
-  const amountDueSize = getFittedFontSize(presentation.amountDue, ctx.serif, totalsWidth - 54, 46, 24);
-  ctx.page.drawText(toPdfText(presentation.amountDue), {
-    x: totalsStartX + (totalsWidth - ctx.serif.widthOfTextAtSize(toPdfText(presentation.amountDue), amountDueSize)) / 2,
+  drawCenteredText({
+    page: ctx.page,
+    text: presentation.amountDue,
+    centerX: amountCardCenterX,
     y: amountCardY - 26,
-    size: amountDueSize,
+    maxWidth: totalsWidth - 54,
+    preferredSize: 46,
+    minSize: 24,
     font: ctx.serif,
     color: COLORS.text,
   });
