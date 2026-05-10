@@ -15,6 +15,7 @@ import { InvoiceCanvas } from "@/components/invoices/invoice-canvas";
 import { StatusBadge } from "@/components/invoices/status-badge";
 import { useNow } from "@/lib/hooks/use-now";
 import { downloadInvoicePdf } from "@/lib/invoices/download-pdf";
+import { isInvoiceOverdue } from "@/lib/invoices/date";
 import { useAppStore } from "@/lib/store/use-app-store";
 
 type InvoiceDetailResponse = {
@@ -46,7 +47,7 @@ export default function InvoicePreviewPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  const [client, setClient] = useState<Client | undefined>(undefined);
+  const [client, setClient] = useState<Client | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,7 @@ export default function InvoicePreviewPage() {
         if (!response.ok || !result?.ok || !result.invoice || !result.profile) {
           setError(result?.message ?? "Unable to load this invoice.");
           setInvoice(null);
+          setClient(null);
           setProfile(null);
           setLoading(false);
           return;
@@ -83,7 +85,7 @@ export default function InvoicePreviewPage() {
         setInvoice(result.invoice);
         setInvoiceItems(result.invoiceItems ?? []);
         setTimeEntries(result.timeEntries ?? []);
-        setClient(result.client ?? undefined);
+        setClient(result.client ?? null);
         setProfile(result.profile);
         setProjects(result.projects ?? []);
         setLoading(false);
@@ -94,6 +96,7 @@ export default function InvoicePreviewPage() {
 
         setError("Network error while loading invoice.");
         setInvoice(null);
+        setClient(null);
         setProfile(null);
         setLoading(false);
       }
@@ -107,11 +110,15 @@ export default function InvoicePreviewPage() {
   }, [invoiceId]);
 
   const isOverdue = useMemo(() => {
-    if (!invoice?.dueDate || invoice.status === "paid") {
+    if (!invoice) {
       return false;
     }
 
-    return new Date(invoice.dueDate).getTime() < now;
+    return isInvoiceOverdue({
+      dueDate: invoice.dueDate,
+      status: invoice.status,
+      now,
+    });
   }, [invoice, now]);
 
   const handleDownloadPdf = async () => {
@@ -222,7 +229,7 @@ export default function InvoicePreviewPage() {
                 >
                   {client?.name?.charAt(0) || "?"}
                 </div>
-                {client?.name}
+                {client?.name ?? "Unknown client"}
               </div>
               {client?.companyName && <span className="text-xs text-slate-400">· {client.companyName}</span>}
             </div>
@@ -258,8 +265,6 @@ export default function InvoicePreviewPage() {
             <Printer className="w-4 h-4" />
             {isDownloadingPdf ? "Preparing PDF..." : "Download PDF"}
           </button>
-
-
         </div>
       </div>
 
