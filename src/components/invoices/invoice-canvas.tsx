@@ -1,4 +1,4 @@
-import { Mail, MapPin, NotebookPen, Phone, WalletCards } from "lucide-react";
+import { Mail, MapPin, NotebookPen, Phone, WalletCards, type LucideIcon } from "lucide-react";
 import { Client, Invoice, InvoiceItem, TimeEntry, UserProfile } from "@/lib/types";
 import { buildInvoicePresentation } from "@/lib/invoices/presentation";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,7 @@ interface InvoiceCanvasProps {
   invoice: Invoice;
   invoiceItems: InvoiceItem[];
   timeEntries: TimeEntry[];
-  client: Client | undefined;
+  client: Client | null | undefined;
   profile: UserProfile;
   projects: { id: string; name: string }[];
   isOverdue: boolean;
@@ -43,7 +43,7 @@ function InfoRow({
   icon: Icon,
   text,
 }: {
-  icon: typeof Mail;
+  icon: LucideIcon;
   text: string;
 }) {
   return (
@@ -96,16 +96,16 @@ export function InvoiceCanvas({
   });
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#e2cfb2] bg-[#fffdf8] shadow-[0_28px_90px_rgba(188,151,98,0.14)] print:rounded-none print:border-0 print:shadow-none">
-      <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(245,233,214,0.7),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(245,233,214,0.9),_transparent_28%),linear-gradient(180deg,_#fffefb_0%,_#fffaf2_100%)] px-5 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 print:bg-none print:px-6 print:py-6">
+    <div className="overflow-hidden rounded-[28px] border border-[#e2cfb2] bg-[#fffdf8] shadow-[0_28px_90px_rgba(188,151,98,0.14)] print:overflow-visible print:rounded-none print:border-0 print:shadow-none">
+      <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(245,233,214,0.7),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(245,233,214,0.9),_transparent_28%),linear-gradient(180deg,_#fffefb_0%,_#fffaf2_100%)] px-5 py-6 sm:px-8 sm:py-8 md:px-12 md:py-10 print:overflow-visible print:bg-none print:px-6 print:py-6">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(90deg,rgba(232,211,180,0.75),rgba(255,251,244,0.95),rgba(232,211,180,0.75))] print:hidden" />
         <div className="pointer-events-none absolute bottom-6 left-4 hidden h-44 w-44 rounded-full border border-[#ead8bf] opacity-60 md:block print:hidden" />
         <div className="pointer-events-none absolute bottom-4 left-8 hidden h-32 w-28 rotate-[-16deg] rounded-[100%_0_100%_0] border border-[#e8d7be] opacity-60 md:block print:hidden" />
 
-        <div className="relative z-10">
+        <div className="relative z-10 print:overflow-visible">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_1.15fr] lg:items-start print:grid-cols-[0.85fr_1.15fr] print:gap-6">
             <div className="space-y-6 print:space-y-4">
-              <div className="space-y-4 print:space-y-2">
+              <div className="space-y-4 print:break-inside-avoid print:space-y-2">
                 <div className="flex h-28 w-28 items-center justify-center rounded-full border border-[#c8a873] bg-[#fffefb] text-[4.7rem] leading-none text-[#111111] shadow-[0_10px_35px_rgba(201,167,114,0.12)] print:h-16 print:w-16 print:text-[2.5rem] print:shadow-none">
                   <span className="font-serif">{presentation.monogram}</span>
                 </div>
@@ -120,7 +120,7 @@ export function InvoiceCanvas({
                 <div className="h-px w-14 bg-[#c8a873]" />
               </div>
 
-              <div className="space-y-4 print:space-y-2">
+              <div className="space-y-4 print:break-inside-avoid print:space-y-2">
                 {presentation.contactEmail ? (
                   <InfoRow icon={Mail} text={presentation.contactEmail} />
                 ) : null}
@@ -132,7 +132,7 @@ export function InvoiceCanvas({
                 ) : null}
               </div>
 
-              <div className="rounded-[24px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(250,242,230,0.78))] p-6 shadow-[0_18px_50px_rgba(188,151,98,0.1)] print:rounded-xl print:p-4 print:shadow-none">
+              <div className="rounded-[24px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(250,242,230,0.78))] p-6 shadow-[0_18px_50px_rgba(188,151,98,0.1)] print:break-inside-avoid print:rounded-xl print:p-4 print:shadow-none">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-[#b28a52] print:text-[9px] print:tracking-[0.14em]">
                   Bill To
                 </p>
@@ -151,7 +151,7 @@ export function InvoiceCanvas({
               </div>
             </div>
 
-            <div>
+            <div className="print:break-inside-avoid">
               <div className="pb-6 print:pb-3">
                 <h1 className="font-serif text-[4.8rem] uppercase leading-none tracking-[0.02em] text-[#111111] sm:text-[6.5rem] print:text-[3.2rem]">
                   Invoice
@@ -184,13 +184,13 @@ export function InvoiceCanvas({
             </div>
           </div>
 
-          <div className="mt-10 print:mt-6">
+          <div className="mt-10 print:mt-6 print:overflow-visible">
             <LineItemsTable lineItems={presentation.lineItems} />
           </div>
 
-          <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_1px_420px] print:mt-6 print:grid-cols-[minmax(0,1fr)_1px_280px] print:gap-6">
+          <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_1px_420px] print:mt-6 print:grid-cols-[minmax(0,1fr)_1px_280px] print:gap-6 print:overflow-visible">
             <div className="space-y-8 print:space-y-4">
-              <div className="flex items-start gap-4 print:gap-3">
+              <div className="flex items-start gap-4 print:break-inside-avoid print:gap-3">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#f5eee4] text-[#b28a52] print:h-9 print:w-9">
                   <WalletCards aria-hidden="true" className="h-7 w-7 print:h-4 print:w-4" />
                 </div>
@@ -211,7 +211,7 @@ export function InvoiceCanvas({
 
               <div className="h-px w-full bg-[#ddc6a5]" />
 
-              <div className="flex items-start gap-4 print:gap-3">
+              <div className="flex items-start gap-4 print:break-inside-avoid print:gap-3">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#f5eee4] text-[#b28a52] print:h-9 print:w-9">
                   <NotebookPen aria-hidden="true" className="h-7 w-7 print:h-4 print:w-4" />
                 </div>
@@ -228,15 +228,17 @@ export function InvoiceCanvas({
 
             <div className="hidden bg-[#ddc6a5] lg:block print:block" />
 
-            <InvoiceTotals
-              subtotal={presentation.subtotal}
-              tax={presentation.tax}
-              discount={presentation.discount}
-              amountDue={presentation.amountDue}
-              taxLabel={presentation.taxLabel}
-              showTax={presentation.showTax}
-              showDiscount={presentation.showDiscount}
-            />
+            <div className="print:break-inside-avoid">
+              <InvoiceTotals
+                subtotal={presentation.subtotal}
+                tax={presentation.tax}
+                discount={presentation.discount}
+                amountDue={presentation.amountDue}
+                taxLabel={presentation.taxLabel}
+                showTax={presentation.showTax}
+                showDiscount={presentation.showDiscount}
+              />
+            </div>
           </div>
         </div>
       </div>
