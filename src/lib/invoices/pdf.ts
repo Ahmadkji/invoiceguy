@@ -105,6 +105,27 @@ function ensureSpace(ctx: PdfContext, height: number) {
   addStyledPage(ctx);
 }
 
+function splitLongWord(word: string, font: PDFFont, fontSize: number, maxWidth: number) {
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const char of word) {
+    const candidate = `${current}${char}`;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth || !current) {
+      current = candidate;
+    } else {
+      chunks.push(current);
+      current = char;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number) {
   const lines: string[] = [];
 
@@ -115,7 +136,13 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
       continue;
     }
 
-    const words = trimmed.split(/\s+/);
+    const words = trimmed.split(/\s+/).flatMap((word) => {
+      if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) {
+        return [word];
+      }
+
+      return splitLongWord(word, font, fontSize, maxWidth);
+    });
     let currentLine = "";
 
     for (const word of words) {
@@ -138,6 +165,44 @@ function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: numbe
   return lines;
 }
 
+function getFittedFontSize(text: string, font: PDFFont, maxWidth: number, preferredSize: number, minSize: number) {
+  let size = preferredSize;
+  const safeText = toPdfText(text);
+
+  while (size > minSize && font.widthOfTextAtSize(safeText, size) > maxWidth) {
+    size -= 1;
+  }
+
+  return size;
+}
+
+function drawTextFit({
+  page,
+  text,
+  x,
+  y,
+  maxWidth,
+  preferredSize,
+  minSize,
+  font,
+  color,
+}: {
+  page: PDFPage;
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  preferredSize: number;
+  minSize: number;
+  font: PDFFont;
+  color: ReturnType<typeof rgb>;
+}) {
+  const safeText = toPdfText(text);
+  const size = getFittedFontSize(safeText, font, maxWidth, preferredSize, minSize);
+  page.drawText(safeText, { x, y, size, font, color });
+  return size;
+}
+
 function drawLabelRow(
   ctx: PdfContext,
   label: string,
@@ -150,6 +215,8 @@ function drawLabelRow(
   const labelSize = 10;
   const valueSize = 12;
   const labelWidth = 96;
+  const valueX = startX + labelWidth;
+  const valueMaxWidth = Math.max(20, width - labelWidth);
 
   ctx.page.drawText(label.toUpperCase(), {
     x: startX,
@@ -159,10 +226,14 @@ function drawLabelRow(
     color: COLORS.accent,
   });
 
-  ctx.page.drawText(toPdfText(value), {
-    x: startX + labelWidth,
+  drawTextFit({
+    page: ctx.page,
+    text: value,
+    x: valueX,
     y: topY - valueSize,
-    size: valueSize,
+    maxWidth: valueMaxWidth,
+    preferredSize: valueSize,
+    minSize: 8,
     font: ctx.sans,
     color: COLORS.text,
   });
@@ -230,6 +301,35 @@ function drawTableGrid(
 }
 
 function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem[]) {
+  if (lineItems.length === 0) {
+    ensureSpace(ctx, 90);
+    ctx.page.drawRectangle({
+      x: PAGE_MARGIN,
+      y: ctx.y - 62,
+      width: CONTENT_WIDTH,
+      height: 62,
+      borderColor: COLORS.line,
+      borderWidth: 1,
+      color: rgb(0.987, 0.971, 0.945),
+    });
+    ctx.page.drawText("NO BILLABLE ITEMS", {
+      x: PAGE_MARGIN + 18,
+      y: ctx.y - 26,
+      size: 11,
+      font: ctx.sansBold,
+      color: COLORS.accent,
+    });
+    ctx.page.drawText("Add at least one line item before sending this invoice.", {
+      x: PAGE_MARGIN + 18,
+      y: ctx.y - 44,
+      size: 10,
+      font: ctx.sans,
+      color: COLORS.muted,
+    });
+    ctx.y -= 90;
+    return;
+  }
+
   let index = 0;
 
   while (index < lineItems.length) {
@@ -262,17 +362,25 @@ function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem
         color: rgb(0.902, 0.854, 0.785),
       });
 
-      ctx.page.drawText(toPdfText(item.date), {
+      drawTextFit({
+        page: ctx.page,
+        text: item.date,
         x: centers.date,
         y: rowTop - 26,
-        size: 10,
+        maxWidth: 60,
+        preferredSize: 10,
+        minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
-      ctx.page.drawText(toPdfText(item.session), {
+      drawTextFit({
+        page: ctx.page,
+        text: item.session,
         x: centers.time,
         y: rowTop - 26,
-        size: 10,
+        maxWidth: 58,
+        preferredSize: 10,
+        minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
@@ -290,24 +398,36 @@ function drawLineItemsTable(ctx: PdfContext, lineItems: PresentedInvoiceLineItem
         descriptionY -= 12;
       }
 
-      ctx.page.drawText(toPdfText(item.hours), {
+      drawTextFit({
+        page: ctx.page,
+        text: item.hours,
         x: centers.hours,
         y: rowTop - 26,
-        size: 10,
+        maxWidth: 60,
+        preferredSize: 10,
+        minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
-      ctx.page.drawText(toPdfText(item.rate), {
+      drawTextFit({
+        page: ctx.page,
+        text: item.rate,
         x: centers.rate,
         y: rowTop - 26,
-        size: 10,
+        maxWidth: 52,
+        preferredSize: 10,
+        minSize: 7,
         font: ctx.sans,
         color: COLORS.text,
       });
-      ctx.page.drawText(toPdfText(item.amount), {
+      drawTextFit({
+        page: ctx.page,
+        text: item.amount,
         x: centers.amount,
         y: rowTop - 26,
-        size: 10,
+        maxWidth: 52,
+        preferredSize: 10,
+        minSize: 7,
         font: ctx.sansBold,
         color: COLORS.text,
       });
@@ -354,13 +474,18 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
     color: COLORS.text,
   });
 
-  ctx.page.drawText(toPdfText(presentation.businessName), {
-    x: PAGE_MARGIN,
-    y: ctx.y - 108,
-    size: 31,
-    font: ctx.serif,
-    color: COLORS.text,
-  });
+  const businessNameLines = wrapText(presentation.businessName, ctx.serif, 31, leftColumnWidth).slice(0, 2);
+  let businessNameY = ctx.y - 108;
+  for (const line of businessNameLines) {
+    ctx.page.drawText(line, {
+      x: PAGE_MARGIN,
+      y: businessNameY,
+      size: 31,
+      font: ctx.serif,
+      color: COLORS.text,
+    });
+    businessNameY -= 34;
+  }
 
   const businessLines = [
     presentation.contactEmail,
@@ -369,7 +494,7 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
   ]
     .filter(Boolean)
     .map((value) => toPdfText(value));
-  let leftInfoY = ctx.y - 164;
+  let leftInfoY = Math.min(ctx.y - 164, businessNameY - 16);
   for (const line of businessLines) {
     const lines = wrapText(line, ctx.sans, 11, leftColumnWidth);
     for (const wrappedLine of lines) {
@@ -409,24 +534,34 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
     thickness: 1,
     color: COLORS.line,
   });
-  ctx.page.drawText(toPdfText(presentation.clientName), {
-    x: PAGE_MARGIN + 14,
-    y: billToTop - 60,
-    size: 24,
-    font: ctx.serif,
-    color: COLORS.text,
-  });
+  const clientNameLines = wrapText(presentation.clientName, ctx.serif, 22, 178).slice(0, 2);
+  let clientNameY = billToTop - 58;
+  for (const line of clientNameLines) {
+    ctx.page.drawText(line, {
+      x: PAGE_MARGIN + 14,
+      y: clientNameY,
+      size: 22,
+      font: ctx.serif,
+      color: COLORS.text,
+    });
+    clientNameY -= 23;
+  }
   const clientInfo = [presentation.clientCompany, presentation.clientEmail, presentation.clientPhone]
     .filter(Boolean)
     .join("  ");
   if (clientInfo) {
-    ctx.page.drawText(toPdfText(clientInfo), {
-      x: PAGE_MARGIN + 14,
-      y: billToTop - 82,
-      size: 10,
-      font: ctx.sans,
-      color: COLORS.muted,
-    });
+    const clientInfoLines = wrapText(clientInfo, ctx.sans, 10, 178).slice(0, 2);
+    let clientInfoY = Math.min(billToTop - 82, clientNameY - 4);
+    for (const line of clientInfoLines) {
+      ctx.page.drawText(line, {
+        x: PAGE_MARGIN + 14,
+        y: clientInfoY,
+        size: 10,
+        font: ctx.sans,
+        color: COLORS.muted,
+      });
+      clientInfoY -= 12;
+    }
   }
 
   const invoiceTitle = "INVOICE";
@@ -471,16 +606,20 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
   ctx.page.drawRectangle({
     x: rightColumnX + 146,
     y: detailTopY - 48,
-    width: 52,
+    width: 68,
     height: 22,
     borderColor: COLORS.pill,
     borderWidth: 1,
     color: COLORS.pill,
   });
-  ctx.page.drawText(toPdfText(presentation.statusLabel), {
+  drawTextFit({
+    page: ctx.page,
+    text: presentation.statusLabel,
     x: rightColumnX + 156,
     y: detailTopY - 40,
-    size: 10,
+    maxWidth: 48,
+    preferredSize: 10,
+    minSize: 7,
     font: ctx.sans,
     color: COLORS.muted,
   });
@@ -535,10 +674,14 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
     font: ctx.sansBold,
     color: COLORS.accent,
   });
-  ctx.page.drawText(toPdfText(presentation.paymentTerms), {
+  drawTextFit({
+    page: ctx.page,
+    text: presentation.paymentTerms,
     x: PAGE_MARGIN + 58,
     y: lowerTopY - 38,
-    size: 15,
+    maxWidth: 168,
+    preferredSize: 15,
+    minSize: 9,
     font: ctx.sans,
     color: COLORS.text,
   });
@@ -622,10 +765,11 @@ export async function buildInvoicePdfBuffer(payload: InvoicePdfPayload) {
     thickness: 1,
     color: COLORS.line,
   });
+  const amountDueSize = getFittedFontSize(presentation.amountDue, ctx.serif, totalsWidth - 54, 46, 24);
   ctx.page.drawText(toPdfText(presentation.amountDue), {
-    x: totalsStartX + 52,
+    x: totalsStartX + (totalsWidth - ctx.serif.widthOfTextAtSize(toPdfText(presentation.amountDue), amountDueSize)) / 2,
     y: amountCardY - 26,
-    size: 46,
+    size: amountDueSize,
     font: ctx.serif,
     color: COLORS.text,
   });
