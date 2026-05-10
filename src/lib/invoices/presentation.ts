@@ -4,6 +4,7 @@ import {
   formatTimeRange,
   getRuleLabel,
 } from "@/lib/billing-rules";
+import { formatInvoiceDate, invoiceDateTime } from "@/lib/invoices/date";
 import { BillingRule, Client, Invoice, InvoiceItem, TimeEntry, UserProfile } from "@/lib/types";
 
 type ProjectSummary = { id: string; name: string };
@@ -60,65 +61,35 @@ const VALID_BILLING_RULES: BillingRule[] = [
   "min_30",
 ];
 
+const LONG_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+};
+
+const TABLE_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
+
 function isBillingRule(value: unknown): value is BillingRule {
   return typeof value === "string" && VALID_BILLING_RULES.includes(value as BillingRule);
 }
 
-function parseDateOnly(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (dateOnlyMatch) {
-    const [, year, month, day] = dateOnlyMatch;
-    return new Date(Number(year), Number(month) - 1, Number(day));
-  }
-
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
 function formatLongDate(value: string | null | undefined) {
-  const date = parseDateOnly(value);
-  if (!date) {
-    return null;
-  }
-
-  return date.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatInvoiceDate(value, LONG_DATE_OPTIONS, "") || null;
 }
 
 function formatTableDate(value: string | null | undefined) {
-  const date = parseDateOnly(value);
-  if (!date) {
-    return "-";
-  }
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function toDateOnlyTime(value: string | null | undefined) {
-  const date = parseDateOnly(value);
-  if (!date) {
-    return null;
-  }
-
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return formatInvoiceDate(value, TABLE_DATE_OPTIONS, "-");
 }
 
 function formatServicePeriod(entries: TimeEntry[]) {
   const dates = entries
     .map((entry) => entry.entryDate)
     .filter(Boolean)
-    .sort((a, b) => (toDateOnlyTime(a) ?? 0) - (toDateOnlyTime(b) ?? 0));
+    .sort((a, b) => (invoiceDateTime(a) ?? 0) - (invoiceDateTime(b) ?? 0));
 
   if (dates.length === 0) {
     return null;
@@ -136,8 +107,8 @@ function formatPaymentTerms(invoiceDate: string, dueDate: string | null) {
     return "Payment due upon receipt";
   }
 
-  const startTime = toDateOnlyTime(invoiceDate);
-  const endTime = toDateOnlyTime(dueDate);
+  const startTime = invoiceDateTime(invoiceDate);
+  const endTime = invoiceDateTime(dueDate);
 
   if (startTime === null || endTime === null) {
     return "Payment due upon receipt";
