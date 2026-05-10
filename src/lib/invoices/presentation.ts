@@ -4,7 +4,7 @@ import {
   formatTimeRange,
   getRuleLabel,
 } from "@/lib/billing-rules";
-import { Client, Invoice, InvoiceItem, TimeEntry, UserProfile } from "@/lib/types";
+import { BillingRule, Client, Invoice, InvoiceItem, TimeEntry, UserProfile } from "@/lib/types";
 
 type ProjectSummary = { id: string; name: string };
 
@@ -49,12 +49,43 @@ export type InvoicePresentation = {
   lineItems: PresentedInvoiceLineItem[];
 };
 
-function formatLongDate(value: string | null | undefined) {
+const VALID_BILLING_RULES: BillingRule[] = [
+  "exact",
+  "round_up_5",
+  "round_up_10",
+  "round_up_15",
+  "round_up_30",
+  "round_up_60",
+  "min_15",
+  "min_30",
+];
+
+function isBillingRule(value: unknown): value is BillingRule {
+  return typeof value === "string" && VALID_BILLING_RULES.includes(value as BillingRule);
+}
+
+function parseDateOnly(value: string | null | undefined) {
   if (!value) {
     return null;
   }
 
-  return new Date(value).toLocaleDateString("en-US", {
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatLongDate(value: string | null | undefined) {
+  const date = parseDateOnly(value);
+  if (!date) {
+    return null;
+  }
+
+  return date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -62,22 +93,32 @@ function formatLongDate(value: string | null | undefined) {
 }
 
 function formatTableDate(value: string | null | undefined) {
-  if (!value) {
+  const date = parseDateOnly(value);
+  if (!date) {
     return "-";
   }
 
-  return new Date(value).toLocaleDateString("en-US", {
+  return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
+function toDateOnlyTime(value: string | null | undefined) {
+  const date = parseDateOnly(value);
+  if (!date) {
+    return null;
+  }
+
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
 function formatServicePeriod(entries: TimeEntry[]) {
   const dates = entries
     .map((entry) => entry.entryDate)
     .filter(Boolean)
-    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    .sort((a, b) => (toDateOnlyTime(a) ?? 0) - (toDateOnlyTime(b) ?? 0));
 
   if (dates.length === 0) {
     return null;
@@ -95,9 +136,14 @@ function formatPaymentTerms(invoiceDate: string, dueDate: string | null) {
     return "Payment due upon receipt";
   }
 
-  const start = new Date(`${invoiceDate}T00:00:00`);
-  const end = new Date(`${dueDate}T00:00:00`);
-  const diffDays = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+  const startTime = toDateOnlyTime(invoiceDate);
+  const endTime = toDateOnlyTime(dueDate);
+
+  if (startTime === null || endTime === null) {
+    return "Payment due upon receipt";
+  }
+
+  const diffDays = Math.max(0, Math.round((endTime - startTime) / 86400000));
 
   if (diffDays > 0) {
     return `Pay within ${diffDays} days`;
@@ -114,7 +160,7 @@ function getStatusLabel(status: Invoice["status"]) {
     void: "Void",
   };
 
-  return labels[status];
+  return labels[status] ?? "Draft";
 }
 
 type BuildInvoicePresentationInput = {
@@ -150,7 +196,8 @@ export function buildInvoicePresentation({
       const entry = timeEntries.find((candidate) => candidate.id === item.timeEntryId);
       const project = projects.find((candidate) => candidate.id === entry?.projectId);
       const projectDisplayName = item.projectNameSnapshot || project?.name || "Hourly work";
-      const billingLabel = entry ? getRuleLabel(entry.billingRuleSnapshot.rule) : "Manual entry";
+      const billingRule = entry?.billingRuleSnapshot?.rule;
+      const billingLabel = isBillingRule(billingRule) ? getRuleLabel(billingRule) : "Manual entry";
 
       return {
         id: item.id,
@@ -186,8 +233,7 @@ export function buildInvoicePresentation({
     servicePeriod: formatServicePeriod(linkedEntries),
     trackedHours: `${formatDecimalHours(invoiceItems.reduce((sum, item) => sum + item.billedMinutes, 0))} hrs`,
     paymentTerms: formatPaymentTerms(invoice.invoiceDate, invoice.dueDate),
-    notes:
-      invoice.notes || "Thank you for your business",
+    notes: invoice.notes || "Thank you for your business",
     subtotal: formatCurrency(invoice.subtotal, profile.defaultCurrency),
     tax: formatCurrency(invoice.taxAmount, profile.defaultCurrency),
     discount: formatCurrency(invoice.discountAmount, profile.defaultCurrency),
